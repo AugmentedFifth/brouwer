@@ -2,6 +2,10 @@
 
 .vscode/
 
+.settings/
+.project
+.cproject
+
 
 ## CMake stuff ##
 
@@ -48,3 +52,4 @@ build/
 *.exe
 *.out
 *.app
+/Debug/
