@@ -36,6 +36,25 @@ namespace brouwer
         }
     }
 
+    std::string Parser::str_repr(const AST* ast) noexcept
+    {
+        if (!ast->val().lexeme.empty())
+        {
+            return ast->val().lexeme;
+        }
+
+        std::string ret = "";
+        const size_t child_count = ast->child_count();
+
+        for (size_t i = 0; i < child_count; ++i)
+        {
+            ret += str_repr(ast->get_child(i));
+            ret.push_back(' ');
+        }
+
+        return ret;
+    }
+
     void Parser::log_depthfirst(const AST* ast, size_t cur_depth)
     {
         for (size_t i = 0; i < cur_depth; ++i)
@@ -43,19 +62,32 @@ namespace brouwer
             std::cout << "  ";
         }
 
-        std::cout << ast->val().lexeme
-                  << " : "
-                  << token_type_names.at(ast->val().type)
-                  << '\n';
+        const std::string lex = ast->val().lexeme;
+
+        if (lex.empty())
+        {
+            std::cout << u8" └─ "
+                      << token_type_names.at(ast->val().type)
+                      << '\n';
+        }
+        else
+        {
+            std::cout << u8" └─ "
+                      << token_type_names.at(ast->val().type)
+                      << " \""
+                      << ast->val().lexeme
+                      << "\"\n";
+        }
 
         const size_t child_count = ast->child_count();
+
         for (size_t i = 0; i < child_count; ++i)
         {
             log_depthfirst(ast->get_child(i), cur_depth + 1);
         }
     }
 
-    AST* Parser::parse() noexcept
+    AST* Parser::parse()
     {
         char last_ch = '\0';
 
@@ -81,7 +113,7 @@ namespace brouwer
 
         if (!prog)
         {
-            return NULL;
+            return nullptr;
         }
 
         mainAst->add_child(prog);
@@ -89,17 +121,24 @@ namespace brouwer
         return mainAst;
     }
 
-    AST* Parser::parse_prog() noexcept
+    AST* Parser::parse_prog()
     {
         AST* expr = parse_expr();
 
-        if (expr == NULL)
+        if (!expr)
         {
-            return NULL;
+            return nullptr;
         }
 
         AST* prog = new AST({ TokenType::prog, "" });
         prog->add_child(expr);
+
+        /*
+        while (!this->charstream.eof() || !this->charhistory.empty())
+        {
+
+        }
+        */
 
         while (expect_newline())
         {
@@ -112,7 +151,7 @@ namespace brouwer
 
                 if (!moreExpr)
                 {
-                    return NULL;
+                    return nullptr;
                 }
 
                 prog->add_child(moreExpr);
@@ -139,6 +178,14 @@ namespace brouwer
         else if (AST* strLit = parse_strLit())
         {
             expr->add_child(strLit);
+        }
+        else if (AST* var = parse_var())
+        {
+            expr->add_child(var);
+        }
+        else if (AST* assign = parse_assign())
+        {
+            expr->add_child(assign);
         }
         else if (AST* fnDecl = parse_fnDecl())
         {
@@ -192,17 +239,9 @@ namespace brouwer
         {
             expr->add_child(numLit);
         }
-        else if (AST* var = parse_var())
-        {
-            expr->add_child(var);
-        }
-        else if (AST* assign = parse_assign())
-        {
-            expr->add_child(assign);
-        }
         else
         {
-            return NULL;
+            return nullptr;
         }
 
         return expr;
@@ -216,7 +255,7 @@ namespace brouwer
 
         if (!init_singleQuote)
         {
-            return NULL;
+            return nullptr;
         }
 
         AST* the_char = parse_chrChr();
@@ -254,7 +293,7 @@ namespace brouwer
 
         if (!init_doubleQuote)
         {
-            return NULL;
+            return nullptr;
         }
 
         strLit->add_child(init_doubleQuote);
@@ -294,7 +333,7 @@ namespace brouwer
 
         if (!isdigit(this->ch))
         {
-            return NULL;
+            return nullptr;
         }
 
         std::string s = "";
@@ -302,7 +341,11 @@ namespace brouwer
         while (isdigit(this->ch))
         {
             s.push_back(this->ch);
-            advance();
+
+            if (advance())
+            {
+                break;
+            }
         }
 
         if (this->ch != '.')
@@ -318,13 +361,17 @@ namespace brouwer
 
         if (!isdigit(this->ch))
         {
-            return NULL;
+            return nullptr;
         }
 
         while (isdigit(this->ch))
         {
             s.push_back(this->ch);
-            advance();
+
+            if (advance())
+            {
+                break;
+            }
         }
 
         AST* numLit = new AST({ TokenType::numLit, "" });
@@ -341,7 +388,7 @@ namespace brouwer
 
         if (!fn_keyword)
         {
-            return NULL;
+            return nullptr;
         }
 
         consume_blanks();
@@ -399,7 +446,7 @@ namespace brouwer
 
         if (!l_paren)
         {
-            return NULL;
+            return nullptr;
         }
 
         AST* expr = parse_expr();
@@ -432,7 +479,7 @@ namespace brouwer
 
         if (!case_keyword)
         {
-            return NULL;
+            return nullptr;
         }
 
         consume_blanks();
@@ -461,7 +508,7 @@ namespace brouwer
 
         if (!if_keyword)
         {
-            return NULL;
+            return nullptr;
         }
 
         consume_blanks();
@@ -513,7 +560,7 @@ namespace brouwer
 
         if (!try_keyword)
         {
-            return NULL;
+            return nullptr;
         }
 
         consume_blanks();
@@ -560,7 +607,7 @@ namespace brouwer
 
         if (!while_keyword)
         {
-            return NULL;
+            return nullptr;
         }
 
         consume_blanks();
@@ -589,7 +636,7 @@ namespace brouwer
 
         if (!for_keyword)
         {
-            return NULL;
+            return nullptr;
         }
 
         consume_blanks();
@@ -638,7 +685,7 @@ namespace brouwer
 
         if (!backslash)
         {
-            return NULL;
+            return nullptr;
         }
 
         AST* first_param = parse_param();
@@ -697,7 +744,7 @@ namespace brouwer
 
         if (!lSqBracket)
         {
-            return NULL;
+            return nullptr;
         }
 
         AST* first_expr = parse_expr();
@@ -749,7 +796,7 @@ namespace brouwer
 
         if (!lCurlyBracket)
         {
-            return NULL;
+            return nullptr;
         }
 
         AST* first_expr = parse_expr();
@@ -799,7 +846,7 @@ namespace brouwer
 
         if (!lCurlyBracket)
         {
-            return NULL;
+            return nullptr;
         }
 
         AST* first_entry = parse_dictEntry();
@@ -847,7 +894,7 @@ namespace brouwer
 
         if (!isalpha(this->ch) && this->ch != '_')
         {
-            return NULL;
+            return nullptr;
         }
 
         std::string id = "";
@@ -862,14 +909,18 @@ namespace brouwer
                 this->charhistory.push_front(this->ch);
                 this->ch = '_';
 
-                return NULL;
+                return nullptr;
             }
         }
 
         while (isalnum(this->ch) || this->ch == '_')
         {
             id.push_back(this->ch);
-            advance();
+
+            if (advance())
+            {
+                break;
+            }
         }
 
         return new AST({ TokenType::ident, id });
@@ -881,7 +932,7 @@ namespace brouwer
 
         if (!var_keyword)
         {
-            return NULL;
+            return nullptr;
         }
 
         AST* pattern = parse_pattern();
@@ -942,7 +993,7 @@ namespace brouwer
 
         if (!pattern)
         {
-            return NULL;
+            return nullptr;
         }
 
         consume_blanks();
@@ -965,11 +1016,26 @@ namespace brouwer
             assign->add_child(type);
         }
 
+        consume_blanks();
+
         AST* equals = parse_equals();
 
         if (!equals)
         {
-            throw std::runtime_error("assignment must use =");
+            this->charhistory.push_front(this->ch);
+            this->charhistory.push_front(' ');
+
+            std::string consumed_pattern = str_repr(pattern);
+
+            while (consumed_pattern.length() > 1)
+            {
+                this->charhistory.push_front(consumed_pattern.back());
+                consumed_pattern.pop_back();
+            }
+
+            this->ch = consumed_pattern.back();
+
+            return nullptr;
         }
 
         AST* expr = parse_expr();
@@ -989,86 +1055,68 @@ namespace brouwer
 
     AST* Parser::parse_pattern()
     {
-        AST* first_unit = parse_patUnit();
-
-        if (!first_unit)
-        {
-            return NULL;
-        }
-
-        AST* pattern = new AST({ TokenType::pattern, "" });
-        pattern->add_child(first_unit);
-
-        while (AST* unit = parse_patUnit())
-        {
-            pattern->add_child(unit);
-        }
-
-        return pattern;
-    }
-
-    AST* Parser::parse_patUnit()
-    {
         consume_blanks();
 
-        AST* patUnit = new AST({ TokenType::patUnit, "" });
+        AST* pattern = new AST({ TokenType::pattern, "" });
 
         if (AST* ident = parse_ident())
         {
-            patUnit->add_child(ident);
+            pattern->add_child(ident);
 
-            return patUnit;
+            return pattern;
         }
 
         if (AST* chrLit = parse_chrLit())
         {
-            patUnit->add_child(chrLit);
+            pattern->add_child(chrLit);
 
-            return patUnit;
+            return pattern;
         }
 
         if (AST* strLit = parse_strLit())
         {
-            patUnit->add_child(strLit);
+            pattern->add_child(strLit);
 
-            return patUnit;
+            return pattern;
         }
 
         if (AST* numLit = parse_numLit())
         {
-            patUnit->add_child(numLit);
+            pattern->add_child(numLit);
 
-            return patUnit;
+            return pattern;
         }
 
         if (AST* underscore = parse_underscore())
         {
-            patUnit->add_child(underscore);
+            pattern->add_child(underscore);
 
-            return patUnit;
+            return pattern;
         }
 
         if (AST* lSqBracket = parse_lSqBracket())
         {
-            AST* first_patUnit = parse_patUnit();
+            AST* first_pattern = parse_pattern();
 
-            patUnit->add_child(lSqBracket);
+            pattern->add_child(lSqBracket);
 
-            if (first_patUnit)
+            if (first_pattern)
             {
+                pattern->add_child(first_pattern);
+
                 consume_blanks();
 
                 while (AST* comma = parse_comma())
                 {
-                    AST* unit = parse_patUnit();
+                    AST* unit = parse_pattern();
 
                     if (!unit)
                     {
                         break;
                     }
 
-                    patUnit->add_child(comma);
-                    patUnit->add_child(unit);
+                    pattern->add_child(comma);
+                    pattern->add_child(unit);
 
                     consume_blanks();
                 }
@@ -1083,12 +1131,12 @@ namespace brouwer
                 );
             }
 
-            patUnit->add_child(rSqBracket);
+            pattern->add_child(rSqBracket);
 
-            return patUnit;
+            return pattern;
         }
 
-        return NULL;
+        return nullptr;
     }
 
     AST* Parser::parse_chrChr()
@@ -1102,7 +1150,7 @@ namespace brouwer
 
         if (!expect_char('\\'))
         {
-            return NULL;
+            return nullptr;
         }
 
         if (std::optional<char> esc_char_opt = expect_char_of(esc_chars))
@@ -1110,7 +1158,7 @@ namespace brouwer
             return new AST({ TokenType::chrChr, {'\\', *esc_char_opt} });
         }
 
-        return NULL;
+        return nullptr;
     }
 
     AST* Parser::parse_strChr()
@@ -1124,7 +1172,7 @@ namespace brouwer
 
         if (!expect_char('\\'))
         {
-            return NULL;
+            return nullptr;
         }
 
         if (std::optional<char> esc_char_opt = expect_char_of(esc_chars))
@@ -1132,7 +1180,7 @@ namespace brouwer
             return new AST({ TokenType::strChr, {'\\', *esc_char_opt} });
         }
 
-        return NULL;
+        return nullptr;
     }
 
     AST* Parser::parse_param()
@@ -1154,14 +1202,14 @@ namespace brouwer
 
             if (!pattern)
             {
-                return NULL;
+                return nullptr;
             }
 
             AST* colon = parse_colon();
 
             if (!colon)
             {
-                return NULL;
+                return nullptr;
             }
 
             AST* type_ident = parse_ident();
@@ -1198,7 +1246,7 @@ namespace brouwer
             return param;
         }
 
-        return NULL;
+        return nullptr;
     }
 
     AST* Parser::parse_dictEntry()
@@ -1209,7 +1257,7 @@ namespace brouwer
 
         if (!ident)
         {
-            return NULL;
+            return nullptr;
         }
 
         consume_blanks();
@@ -1218,7 +1266,7 @@ namespace brouwer
 
         if (!equals)
         {
-            return NULL;
+            return nullptr;
         }
 
         AST* val = parse_expr();
@@ -1242,7 +1290,7 @@ namespace brouwer
     {
         if (!expect_char('='))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::equals, "=" });
@@ -1252,7 +1300,7 @@ namespace brouwer
     {
         if (!expect_char('\''))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::singleQuote, "'" });
@@ -1262,7 +1310,7 @@ namespace brouwer
     {
         if (!expect_char('"'))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::doubleQuote, "\"" });
@@ -1272,7 +1320,7 @@ namespace brouwer
     {
         if (!expect_keyword("fn"))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::fnKeyword, "fn" });
@@ -1282,7 +1330,7 @@ namespace brouwer
     {
         if (!expect_keyword("case"))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::caseKeyword, "case" });
@@ -1292,7 +1340,7 @@ namespace brouwer
     {
         if (!expect_keyword("if"))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::ifKeyword, "if" });
@@ -1302,7 +1350,7 @@ namespace brouwer
     {
         if (!expect_keyword("else"))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::elseKeyword, "else" });
@@ -1312,7 +1360,7 @@ namespace brouwer
     {
         if (!expect_keyword("try"))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::tryKeyword, "try" });
@@ -1322,7 +1370,7 @@ namespace brouwer
     {
         if (!expect_keyword("catch"))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::catchKeyword, "catch" });
@@ -1332,7 +1380,7 @@ namespace brouwer
     {
         if (!expect_keyword("while"))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::whileKeyword, "while" });
@@ -1342,7 +1390,7 @@ namespace brouwer
     {
         if (!expect_keyword("for"))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::forKeyword, "for" });
@@ -1352,7 +1400,7 @@ namespace brouwer
     {
         if (!expect_keyword("in"))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::inKeyword, "in" });
@@ -1362,7 +1410,7 @@ namespace brouwer
     {
         if (!expect_keyword("var"))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::varKeyword, "var" });
@@ -1372,7 +1420,7 @@ namespace brouwer
     {
         if (!expect_char(','))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::comma, "," });
@@ -1382,7 +1430,7 @@ namespace brouwer
     {
         if (!expect_op(":"))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::colon, ":" });
@@ -1392,7 +1440,7 @@ namespace brouwer
     {
         if (!expect_keyword("_"))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::underscore, "_" });
@@ -1402,7 +1450,7 @@ namespace brouwer
     {
         if (!expect_op("->"))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::arrow, "->" });
@@ -1412,7 +1460,7 @@ namespace brouwer
     {
         if (!expect_char('('))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::lParen, "(" });
@@ -1422,7 +1470,7 @@ namespace brouwer
     {
         if (!expect_char(')'))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::rParen, ")" });
@@ -1432,7 +1480,7 @@ namespace brouwer
     {
         if (!expect_char('['))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::lSqBracket, "[" });
@@ -1442,7 +1490,7 @@ namespace brouwer
     {
         if (!expect_char(']'))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::rSqBracket, "]" });
@@ -1452,7 +1500,7 @@ namespace brouwer
     {
         if (!expect_char('{'))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::lCurlyBracket, "{" });
@@ -1462,7 +1510,7 @@ namespace brouwer
     {
         if (!expect_char('}'))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::rCurlyBracket, "}" });
@@ -1472,23 +1520,32 @@ namespace brouwer
     {
         if (!expect_char('\\'))
         {
-            return NULL;
+            return nullptr;
         }
 
         return new AST({ TokenType::backslash, "\\" });
     }
 
-    void Parser::advance() noexcept
+    /*!
+     * Returns `true` when the EOF is reached and `charhistory` is consumed,
+     * otherwise returns `false`.
+     */
+    bool Parser::advance() noexcept
     {
         if (!this->charhistory.empty())
         {
             this->ch = this->charhistory.front();
             this->charhistory.pop_front();
+
+            return this->charhistory.empty() && this->charstream.eof();
         }
-        else
+
+        if (this->charstream >> std::noskipws >> this->ch)
         {
-            this->charstream >> std::noskipws >> this->ch;
+            return false;
         }
+
+        return true;
     }
 
     bool Parser::consume_blanks() noexcept
@@ -1564,6 +1621,11 @@ namespace brouwer
             }
         }
 
+        if (this->charstream.eof() && isnewline(this->ch))
+        {
+            this->currentindent.clear();
+        }
+
         return true;
     }
 
@@ -1637,7 +1699,7 @@ namespace brouwer
         }
 
         i++;
-        std::vector<char> historicstack(s.length());
+        std::vector<char> historicstack;
 
         while (i < s.length() && !this->charhistory.empty())
         {
@@ -1712,7 +1774,7 @@ namespace brouwer
         }
 
         i++;
-        std::vector<char> historicstack(kwd.length());
+        std::vector<char> historicstack;
 
         while (i < kwd.length() && !this->charhistory.empty())
         {
@@ -1792,7 +1854,10 @@ namespace brouwer
                     historicstack.pop_back();
                 }
 
-                this->ch = historicstack.back();
+                if (!historicstack.empty())
+                {
+                    this->ch = historicstack.back();
+                }
 
                 return false;
             }
@@ -1842,7 +1907,7 @@ namespace brouwer
         }
 
         i++;
-        std::vector<char> historicstack(op.length());
+        std::vector<char> historicstack;
 
         while (i < op.length() && !this->charhistory.empty())
         {

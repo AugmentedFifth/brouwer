@@ -53,3 +53,10 @@ build/
 *.out
 *.app
 /Debug/
+
+
+## Testing stuff ##
+
+brouwer
+
+*.bwr

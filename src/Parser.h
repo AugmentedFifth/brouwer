@@ -17,6 +17,19 @@ namespace brouwer
         public:
             using AST = Tree<Token>;
 
+            Parser(std::string& filename);
+
+            AST* parse();
+
+            static std::string str_repr(const AST* ast) noexcept;
+
+            static void log_depthfirst(const AST* ast, size_t cur_depth);
+
+            static bool isnewline(char c) noexcept;
+
+            static bool isprefixof(const std::string& a,
+                                   const std::string& b) noexcept;
+
         private:
             std::ifstream charstream;
 
@@ -30,12 +43,7 @@ namespace brouwer
 
             static const std::unordered_set<char> op_chars;
 
-        public:
-            Parser(std::string& filename);
-
-            AST* parse() noexcept;
-
-            AST* parse_prog() noexcept;
+            AST* parse_prog();
 
             AST* parse_expr();
 
@@ -74,8 +82,6 @@ namespace brouwer
             AST* parse_assign();
 
             AST* parse_pattern();
-
-            AST* parse_patUnit();
 
             AST* parse_chrChr();
 
@@ -133,7 +139,7 @@ namespace brouwer
 
             AST* parse_backslash();
 
-            void advance() noexcept;
+            bool advance() noexcept;
 
             bool consume_blanks() noexcept;
 
@@ -158,12 +164,5 @@ namespace brouwer
             std::optional<char> expect_char_not_of(
                 const std::unordered_set<char>& cs
             ) noexcept;
-
-            static void log_depthfirst(const AST* ast, size_t cur_depth);
-
-            static bool isnewline(char c) noexcept;
-
-            static bool isprefixof(const std::string& a,
-                                   const std::string& b) noexcept;
     };
 }

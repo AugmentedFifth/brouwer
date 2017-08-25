@@ -31,7 +31,6 @@ namespace brouwer
         , var
         , assign
         , pattern
-        , patUnit
         , strChr
         , param
         , realLit
@@ -90,7 +89,6 @@ namespace brouwer
         , {TokenType::var,           "var"}
         , {TokenType::assign,        "assign"}
         , {TokenType::pattern,       "pattern"}
-        , {TokenType::patUnit,       "patUnit"}
         , {TokenType::strChr,        "strChr"}
         , {TokenType::param,         "param"}
         , {TokenType::realLit,       "realLit"}
