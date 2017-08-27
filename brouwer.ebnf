@@ -1,0 +1,246 @@
+(*
+
+no inheritance, only traits
+
+"generator" functions like js/python
+
+? as syntax sugar for Maybe
+
+*)
+
+
+program =
+    [ module declaration ], { import }, { line } ;
+
+module declaration =
+    "module", identifier, [ ( "exposing" | "hiding" ), identifier, { ",", identifier }, [ "," ] ], newline ;
+
+import =
+    "import", identifier, [ "as", identifier | ( "exposing" | "hiding" ), identifier, { ",", identifier }, [ "," ] ], newline ;
+
+line =
+    [ expression ], [ line comment ], line termination ;
+
+line comment =
+    "--", [ print character - operator symbol, { print character } ] ;
+
+expression =
+    subexpression, { subexpression } ;
+
+subexpression =
+      var declaration
+    | assignment
+    | function declaration
+    | parened expression
+    | return statement
+    | case
+    | if else
+    | try catch
+    | while loop
+    | for loop
+    | anonymous function
+    | tuple literal
+    | list literal
+    | list comprehension
+    | dictionary literal
+    | dictionary comprehension
+    | set literal
+    | set comprehension
+    | qualified identifier
+    | operator
+    | infixed function
+    | numeric literal
+    | character literal
+    | string literal
+    ;
+
+var declaration =
+    "var", pattern, [ ":", type identifier ], "=", expression ;
+
+assignment =
+    pattern, [ ":", type identifier ], "=", expression ;
+
+function declaration =
+    "fn", identifier, parameter, { parameter }, [ "->", type identifier ], newline,
+        line block ;
+
+parened expression =
+    "(", expression, ")" ;
+
+return statement =
+    "return", expression ;
+
+case =
+    "case", expression, newline,
+        INDENT, pattern, "=>", line,
+      { INDENT, pattern, "=>", line } ;
+
+if else =
+      "if", expression, newline,
+          line block,
+    [ "else", ( if else | newline,
+          line block ) ] ;
+
+try catch =
+    "try", newline,
+        line block,
+    "catch", identifier, newline,
+        line block ;
+
+while loop =
+    "while", expression, newline,
+        line block ;
+
+for loop =
+    "for", pattern, "in", expression, newline,
+        line block ;
+
+anonymous function =
+    "\\", parameter, { ",", parameter }, "->", expression ;
+
+tuple literal =
+    "(", [ expression, ",", expression, { ",", expression }, [ "," ] ], ")" ;
+
+list literal =
+    "[", [ expression, { ",", expression }, [ "," ] ], "]" ;
+
+list comprehension =
+    "[", expression, "|", [ ( generator | expression ), { ",", ( generator | expression ) }, [ "," ] ], "]" ;
+
+dictionary literal =
+      "{", "}"
+    | "{", expression, "=", expression, { ",", expression, "=", expression }, [ "," ], "}"
+    ;
+
+dictionary comprehension =
+    "{", expression, "=", expression, "|", [ ( generator | expression ), { ",", ( generator | expression ) }, [ "," ] ], "}" ;
+
+set literal =
+      "{", "}"
+    | "{", expression, { ",", expression }, [ "," ], "}"
+    ;
+
+set comprehension =
+    "{", expression, "|", [ ( generator | expression ), { ",", ( generator | expression ) }, [ "," ] ], "}" ;
+
+qualified identifier =
+      member identifier
+    | scoped identifier
+    | identifier
+    ;
+
+namespaced identifier =
+      scoped identifier
+    | identifier
+    ;
+
+identifier =
+      letter
+    | ( letter | "_" ), ( letter | digit | "_" ), { letter | digit | "_" }
+    ;
+
+member identifier =
+    identifier, ".", identifier ;
+
+scoped identifier =
+    identifier, "::", identifier ;
+
+type identifier =
+      namespaced identifier
+    | "(", [ type identifier, ",", type identifier, { ",", type identifier }, [ "," ] ], ")"
+    | "[", type identifier, "]"
+    | "{", type identifier, ",", type identifier "}"
+    | "{", type identifier, "}"
+    ;
+
+operator =
+    operator symbol, { operator symbol } ;
+
+numeric literal =
+      real literal
+    | integer literal
+    ;
+
+character literal =
+      "'", ( print character - "'" - "\\" ), "'"
+    | "'\\", escape sequence, "'"
+    ;
+
+string literal =
+    '"', { string character }, '"' ;
+
+infixed function =
+    "`", qualified identifier, "`" ;
+
+pattern =
+      identifier
+    | character literal
+    | string literal
+    | numeric literal
+    | "_"
+    | "(", [ pattern, ",", pattern, { ",", pattern }, [ "," ] ], ")"
+    | "[", [ pattern, { ",", pattern }, [ "," ] ], "]"
+    | "{", [ pattern, "=", pattern, { ",", pattern, "=", pattern }, [ "," ] ], "}"
+    | "{", [ pattern, { ",", pattern }, [ "," ] ], "}"
+    ;
+
+string character =
+      ( print character - '"' - "\\" )
+    | "\\", escape sequence
+    ;
+
+parameter =
+      pattern
+    | "(", pattern, ":", type identifier, ")"
+    ;
+
+generator =
+    pattern, "<-", expression ;
+
+real literal =
+      [ "-" ], digit, { digit }, ".", digit, { digit }
+    | [ "-" ], "Infinity"
+    | "NaN"
+    ;
+
+integer literal =
+    [ "-" ], digit, { digit } ;
+
+print character =
+    ? any 7-bit ASCII print character ? ;
+
+letter =
+      "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H"
+    | "I" | "J" | "K" | "L" | "M" | "N" | "O" | "P"
+    | "Q" | "R" | "S" | "T" | "U" | "V" | "W" | "X"
+    | "Y" | "Z" | "a" | "b" | "c" | "d" | "e" | "f"
+    | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n"
+    | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v"
+    | "w" | "x" | "y" | "z" ;
+
+digit =
+      "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7"
+    | "8" | "9" ;
+
+escape sequence =
+      '"' | "'" | "t" | "v" | "n" | "r" | "b" | "0" ;
+
+operator symbol =
+      "?" | "<" | ">" | "=" | "%" | "\\" | "~" | "!"
+    | "@" | "#" | "$" | "|" | "&" | "*"  | "/" | "+"
+    | "^" | "-" | ":" | ";" ;
+
+line block =
+    INDENT, line, { INDENT, line } ;
+
+line termination =
+    newline | ? EOF ? ;
+
+newline =
+    ( "\n" | "\r" ), { "\n" | "\r" } ;
+
+INDENT =
+    ? one additional level of indentation ? ;
+
+BLOCK COMMENT =
+    "{-", { print character | newline }, "-}" ;

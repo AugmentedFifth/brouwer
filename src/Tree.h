@@ -28,7 +28,7 @@ namespace brouwer
                 this->children.push_back(child);
             }
 
-            T val() const noexcept
+            const T& val() const noexcept
             {
                 return this->value;
             }

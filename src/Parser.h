@@ -45,6 +45,8 @@ namespace brouwer
 
             AST* parse_prog();
 
+            AST* parse_stmt();
+
             AST* parse_expr();
 
             AST* parse_chrLit();

@@ -23,7 +23,13 @@ namespace brouwer
     {
         '?', '<', '>', '=', '%', '\\', '~', '!',
         '@', '#', '$', '|', '&', '*',  '/', '+',
-        '^', '-'
+        '^', '-', ':', ';'
+    };
+
+    const std::unordered_set<std::string> Parser::reserved_ops =
+    {
+        ":", "->", "=>", "<-", "--", "|", "\\", "=",
+        ".", "::"
     };
 
     Parser::Parser(std::string& filename) : charstream(filename.c_str())
@@ -62,7 +68,7 @@ namespace brouwer
             std::cout << "  ";
         }
 
-        const std::string lex = ast->val().lexeme;
+        const std::string& lex = ast->val().lexeme;
 
         if (lex.empty())
         {
@@ -75,7 +81,7 @@ namespace brouwer
             std::cout << u8" └─ "
                       << token_type_names.at(ast->val().type)
                       << " \""
-                      << ast->val().lexeme
+                      << lex
                       << "\"\n";
         }
 
@@ -123,261 +129,563 @@ namespace brouwer
 
     AST* Parser::parse_prog()
     {
-        AST* expr = parse_expr();
+        AST* prog = new AST({ TokenType::prog, "" });
 
-        if (!expr)
+        AST* module_decl = parse_modDecl();
+
+        if (module_decl)
+        {
+            prog->add_child(module_decl);
+        }
+
+        while (!this->charstream.eof() || !this->charhistory.empty())
+        {
+            AST* import = parse_import();
+
+            if (!import)
+            {
+                break;
+            }
+
+            prog->add_child(import);
+        }
+
+        while (!this->charstream.eof() || !this->charhistory.empty())
+        {
+            AST* line = parse_line();
+
+            if (!line)
+            {
+                break;
+            }
+
+            prog->add_child(line);
+        }
+
+        return prog;
+    }
+
+    AST* Parser::parse_modDecl()
+    {
+        AST* module_keyword = parse_moduleKeyword();
+
+        if (!module_keyword)
         {
             return nullptr;
         }
 
-        AST* prog = new AST({ TokenType::prog, "" });
-        prog->add_child(expr);
+        AST* mod_decl = new AST({ TokenType::modDecl, "" });
+        mod_decl->add_child(module_keyword);
 
-        /*
-        while (!this->charstream.eof() || !this->charhistory.empty())
+        AST* mod_name = parse_ident();
+
+        if (!mod_name)
         {
-
+            throw std::runtime_error(
+                "expected name of module to be plain identifier"
+            );
         }
-        */
 
-        while (expect_newline())
+        mod_decl->add_child(mod_name);
+
+        AST* exporting_keyword = parse_exportingKeyword();
+        AST* hiding_keyword = nullptr;
+
+        if (!exporting_keyword)
         {
-            if (
-                !(this->charstream.eof() && this->charhistory.empty()) &&
-                !isnewline(this->ch)                                   &&
-                !isblank(this->ch)
-            ) {
-                AST* moreExpr = parse_expr();
+            hiding_keyword = parse_hidingKeyword();
+        }
 
-                if (!moreExpr)
-                {
-                    return nullptr;
-                }
-
-                prog->add_child(moreExpr);
+        if (exporting_keyword || hiding_keyword)
+        {
+            if (exporting_keyword)
+            {
+                mod_decl->add_child(exporting_keyword);
             }
             else
             {
-                break;
+                mod_decl->add_child(hiding_keyword);
+            }
+
+            AST* first_ident = parse_ident();
+
+            if (!first_ident)
+            {
+                throw std::runtime_error(
+                    "expected at least one item in module export/hide list"
+                );
+            }
+
+            mod_decl->add_child(first_ident);
+
+            consume_blanks();
+
+            while (AST* comma = parse_comma())
+            {
+                AST* ident = parse_ident();
+
+                if (!ident)
+                {
+                    break;
+                }
+
+                mod_decl->add_child(comma);
+                mod_decl->add_child(ident);
+
+                consume_blanks();
             }
         }
 
-        return prog;
+        if (!expect_newline())
+        {
+            throw std::runtime_error(
+                "expected newline after module declaration"
+            );
+        }
+
+        return mod_decl;
+    }
+
+    AST* Parser::parse_import()
+    {
+        AST* import_keyword = parse_importKeyword();
+
+        if (!import_keyword)
+        {
+            return nullptr;
+        }
+
+        AST* import = new AST({ TokenType::import, "" });
+        import->add_child(import_keyword);
+
+        AST* mod_name = parse_ident();
+
+        if (!mod_name)
+        {
+            throw std::runtime_error(
+                "expected module name after import keyword"
+            );
+        }
+
+        import->add_child(mod_name);
+
+        AST* as_keyword = parse_asKeyword();
+
+        if (as_keyword)
+        {
+            import->add_child(as_keyword);
+
+            AST* qual_name = parse_ident();
+
+            if (!qual_name)
+            {
+                throw std::runtime_error(
+                    "expected namespace alias after as keyword"
+                );
+            }
+
+            import->add_child(qual_name);
+        }
+        else
+        {
+            AST* hiding_keyword = parse_hidingKeyword();
+
+            if (hiding_keyword)
+            {
+                import->add_child(hiding_keyword);
+            }
+
+            consume_blanks();
+
+            AST* l_paren = parse_lParen();
+
+            if (!l_paren)
+            {
+                throw std::runtime_error(
+                    "expected left paren to start import list"
+                );
+            }
+
+            import->add_child(l_paren);
+
+            AST* first_import_item = parse_ident();
+
+            if (!first_import_item)
+            {
+                throw std::runtime_error(
+                    "expected at least one import item in import list"
+                );
+            }
+
+            import->add_child(first_import_item);
+
+            consume_blanks();
+
+            while (AST* comma = parse_comma())
+            {
+                AST* import_item = parse_ident();
+
+                if (!import_item)
+                {
+                    break;
+                }
+
+                import->add_child(comma);
+                import->add_child(import_item);
+
+                consume_blanks();
+            }
+
+            consume_blanks();
+
+            AST* r_paren = parse_rParen();
+
+            if (!r_paren)
+            {
+                throw std::runtime_error(
+                    "expected right paren to terminate import list"
+                );
+            }
+
+            import->add_child(r_paren);
+        }
+
+        if (!expect_newline())
+        {
+            throw std::runtime_error(
+                "expected newline after import statement"
+            );
+        }
+
+        return import;
+    }
+
+    AST* Parser::parse_line()
+    {
+        consume_blanks();
+
+        AST* line = new AST({ TokenType::line, "" });
+
+        AST* expr = parse_expr();
+
+        if (expr)
+        {
+            line->add_child(expr);
+        }
+
+        consume_lineComment();
+
+        return line;
+    }
+
+    bool Parser::consume_lineComment()
+    {
+        consume_blanks();
+
+        if (!consume_lineCommentOp())
+        {
+            return false;
+        }
+
+        if (isnewline(this->ch))
+        {
+            expect_newline();
+
+            return true;
+        }
+
+        while (!this->charhistory.empty())
+        {
+            this->ch = this->charhistory.front();
+            this->charhistory.pop_front();
+
+            if (isnewline(this->ch))
+            {
+                expect_newline();
+
+                return true;
+            }
+        }
+
+        while (this->charstream >> std::noskipws >> this->ch)
+        {
+            if (isnewline(this->ch))
+            {
+                expect_newline();
+
+                return true;
+            }
+        }
+
+        return true;
     }
 
     AST* Parser::parse_expr()
     {
         consume_blanks();
 
-        AST* expr = new AST({ TokenType::expr, "" });
+        AST* first_subexpr = parse_subexpr();
 
-        if (AST* chrLit = parse_chrLit())
+        if (!first_subexpr)
         {
-            expr->add_child(chrLit);
+            return nullptr;
         }
-        else if (AST* strLit = parse_strLit())
+
+        AST* expr = new AST({ TokenType::expr, "" });
+        expr->add_child(first_subexpr);
+
+        while (!expect_newline())
         {
-            expr->add_child(strLit);
+            AST* subexpr = parse_subexpr();
+
+            if (!subexpr)
+            {
+                throw std::runtime_error(
+                    "missing subexpression in expression"
+                );
+            }
+
+            expr->add_child(subexpr);
         }
-        else if (AST* var = parse_var())
+
+        return expr;
+    }
+
+    AST* Parser::parse_subexpr()
+    {
+        consume_blanks();
+
+        AST* subexpr = new AST({ TokenType::subexpr, "" });
+
+        if (AST* var = parse_var())
         {
-            expr->add_child(var);
+            subexpr->add_child(var);
         }
         else if (AST* assign = parse_assign())
         {
-            expr->add_child(assign);
+            subexpr->add_child(assign);
         }
         else if (AST* fnDecl = parse_fnDecl())
         {
-            expr->add_child(fnDecl);
+            subexpr->add_child(fnDecl);
         }
         else if (AST* parened = parse_parened())
         {
-            expr->add_child(parened);
+            subexpr->add_child(parened);
+        }
+        else if (AST* return_ = parse_return())
+        {
+            subexpr->add_child(return_);
         }
         else if (AST* case_ = parse_case())
         {
-            expr->add_child(case_);
+            subexpr->add_child(case_);
         }
         else if (AST* ifElse = parse_ifElse())
         {
-            expr->add_child(ifElse);
+            subexpr->add_child(ifElse);
         }
         else if (AST* try_ = parse_try())
         {
-            expr->add_child(try_);
+            subexpr->add_child(try_);
         }
         else if (AST* while_ = parse_while())
         {
-            expr->add_child(while_);
+            subexpr->add_child(while_);
         }
         else if (AST* for_ = parse_for())
         {
-            expr->add_child(for_);
+            subexpr->add_child(for_);
         }
         else if (AST* lambda = parse_lambda())
         {
-            expr->add_child(lambda);
+            subexpr->add_child(lambda);
+        }
+        else if (AST* tupleLit = parse_tupleLit())
+        {
+            subexpr->add_child(tupleLit);
         }
         else if (AST* listLit = parse_listLit())
         {
-            expr->add_child(listLit);
+            subexpr->add_child(listLit);
         }
-        else if (AST* setLit = parse_setLit())
+        else if (AST* listComp = parse_listComp())
         {
-            expr->add_child(setLit);
+            subexpr->add_child(listComp);
         }
         else if (AST* dictLit = parse_dictLit())
         {
-            expr->add_child(dictLit);
+            subexpr->add_child(dictLit);
         }
-        else if (AST* ident = parse_ident())
+        else if (AST* dictComp = parse_dictComp())
         {
-            expr->add_child(ident);
+            subexpr->add_child(dictComp);
+        }
+        else if (AST* setLit = parse_setLit())
+        {
+            subexpr->add_child(setLit);
+        }
+        else if (AST* setComp = parse_setComp())
+        {
+            subexpr->add_child(setComp);
+        }
+        else if (AST* qual_ident = parse_qualIdent())
+        {
+            subexpr->add_child(qual_ident);
+        }
+        else if (AST* op = parse_op())
+        {
+            subexpr->add_child(op);
+        }
+        else if (AST* infixed = parse_infixed())
+        {
+            subexpr->add_child(infixed);
         }
         else if (AST* numLit = parse_numLit())
         {
-            expr->add_child(numLit);
+            subexpr->add_child(numLit);
+        }
+        else if (AST* chrLit = parse_chrLit())
+        {
+            subexpr->add_child(chrLit);
+        }
+        else if (AST* strLit = parse_strLit())
+        {
+            subexpr->add_child(strLit);
         }
         else
         {
             return nullptr;
         }
 
-        return expr;
+        return subexpr;
     }
 
-    AST* Parser::parse_chrLit()
+    AST* Parser::parse_var()
     {
-        consume_blanks();
+        AST* var_keyword = parse_varKeyword();
 
-        AST* init_singleQuote = parse_singleQuote();
-
-        if (!init_singleQuote)
+        if (!var_keyword)
         {
             return nullptr;
         }
 
-        AST* the_char = parse_chrChr();
+        AST* pattern = parse_pattern();
 
-        if (!the_char)
+        if (!pattern)
         {
-            throw std::runtime_error("unexpected ' or EOF");
+            throw std::runtime_error(
+                "left-hand side of var assignment must be a pattern"
+            );
         }
 
-        AST* end_singleQuote = parse_singleQuote();
-
-        if (!end_singleQuote)
-        {
-            std::string err_msg = "expected ', got: ";
-            err_msg += this->ch;
-
-            throw std::runtime_error(err_msg);
-        }
-
-        AST* chrLit = new AST({ TokenType::chrLit, "" });
-        chrLit->add_child(init_singleQuote);
-        chrLit->add_child(the_char);
-        chrLit->add_child(end_singleQuote);
-
-        return chrLit;
-    }
-
-    AST* Parser::parse_strLit()
-    {
         consume_blanks();
 
-        AST* strLit = new AST({ TokenType::strLit, "" });
+        AST* var = new AST({ TokenType::var, "" });
+        var->add_child(var_keyword);
+        var->add_child(pattern);
 
-        AST* init_doubleQuote = parse_doubleQuote();
-
-        if (!init_doubleQuote)
+        if (AST* colon = parse_colon())
         {
-            return nullptr;
-        }
+            AST* type = parse_qualIdent();
 
-        strLit->add_child(init_doubleQuote);
-
-        while (this->ch != '"')
-        {
-            if (AST* a_char = parse_strChr())
-            {
-                strLit->add_child(a_char);
-            }
-            else
+            if (!type)
             {
                 throw std::runtime_error(
-                    "invalid escape sequence or unexpected EOF"
+                    "type of var binding must be a valid identifier"
                 );
             }
+
+            var->add_child(colon);
+            var->add_child(type);
         }
 
-        AST* end_doubleQuote = parse_doubleQuote();
+        AST* equals = parse_equals();
 
-        if (!end_doubleQuote)
+        if (!equals)
         {
-            std::string err_msg = "expected \", got: ";
-            err_msg += this->ch;
-
-            throw std::runtime_error(err_msg);
+            throw std::runtime_error("var assignment must use =");
         }
 
-        strLit->add_child(end_doubleQuote);
+        AST* expr = parse_expr();
 
-        return strLit;
+        if (!expr)
+        {
+            throw std::runtime_error(
+                "right-hand side of var assignment must be a valid expression"
+            );
+        }
+
+        var->add_child(equals);
+        var->add_child(expr);
+
+        return var;
     }
 
-    AST* Parser::parse_numLit()
+    AST* Parser::parse_assign()
     {
+        AST* pattern = parse_pattern();
+
+        if (!pattern)
+        {
+            return nullptr;
+        }
+
         consume_blanks();
 
-        if (!isdigit(this->ch))
+        AST* assign = new AST({ TokenType::assign, "" });
+        assign->add_child(pattern);
+
+        if (AST* colon = parse_colon())
         {
+            AST* type = parse_qualIdent();
+
+            if (!type)
+            {
+                throw std::runtime_error(
+                    "type of binding must be a valid identifier"
+                );
+            }
+
+            assign->add_child(colon);
+            assign->add_child(type);
+        }
+
+        consume_blanks();
+
+        AST* equals = parse_equals();
+
+        if (!equals)
+        {
+            this->charhistory.push_front(this->ch);
+            this->charhistory.push_front(' ');
+
+            std::string consumed_pattern = str_repr(pattern);
+
+            while (consumed_pattern.length() > 1)
+            {
+                this->charhistory.push_front(consumed_pattern.back());
+                consumed_pattern.pop_back();
+            }
+
+            this->ch = consumed_pattern.back();
+
             return nullptr;
         }
 
-        std::string s = "";
+        AST* expr = parse_expr();
 
-        while (isdigit(this->ch))
+        if (!expr)
         {
-            s.push_back(this->ch);
-
-            if (advance())
-            {
-                break;
-            }
+            throw std::runtime_error(
+                "right-hand side of assignment must be a valid expression"
+            );
         }
 
-        if (this->ch != '.')
-        {
-            AST* numLit = new AST({ TokenType::numLit, "" });
-            numLit->add_child(new AST({ TokenType::intLit, s }));
+        assign->add_child(equals);
+        assign->add_child(expr);
 
-            return numLit;
-        }
-
-        s.push_back(this->ch);
-        advance();
-
-        if (!isdigit(this->ch))
-        {
-            return nullptr;
-        }
-
-        while (isdigit(this->ch))
-        {
-            s.push_back(this->ch);
-
-            if (advance())
-            {
-                break;
-            }
-        }
-
-        AST* numLit = new AST({ TokenType::numLit, "" });
-        numLit->add_child(new AST({ TokenType::realLit, s }));
-
-        return numLit;
+        return assign;
     }
 
     AST* Parser::parse_fnDecl()
@@ -392,6 +700,7 @@ namespace brouwer
         }
 
         consume_blanks();
+
         AST* fn_name = parse_ident();
 
         if (!fn_name)
@@ -400,6 +709,7 @@ namespace brouwer
         }
 
         consume_blanks();
+
         AST* fnDecl = new AST({ TokenType::fnDecl, "" });
         fnDecl->add_child(fn_keyword);
         fnDecl->add_child(fn_name);
@@ -410,13 +720,14 @@ namespace brouwer
         }
 
         consume_blanks();
+
         AST* arrow = parse_arrow();
 
         if (arrow)
         {
             fnDecl->add_child(arrow);
 
-            AST* ret_type = parse_ident();
+            AST* ret_type = parse_qualIdent();
 
             if (!ret_type)
             {
@@ -424,13 +735,6 @@ namespace brouwer
             }
 
             fnDecl->add_child(ret_type);
-        }
-
-        const std::string start_indent = this->currentindent;
-
-        if (!expect_newline())
-        {
-            throw std::runtime_error("expected newline after function header");
         }
 
         get_block(fnDecl, TokenType::expr);
@@ -471,6 +775,31 @@ namespace brouwer
         return parened;
     }
 
+    AST* Parser::parse_return()
+    {
+        consume_blanks();
+
+        AST* return_keyword = parse_returnKeyword();
+
+        if (!return_keyword)
+        {
+            return nullptr;
+        }
+
+        AST* expr = prase_expr();
+
+        if (!expr)
+        {
+            throw std::runtime_error("expected expression to return");
+        }
+
+        AST* return_ = new AST({ TokenType::return_, "" });
+        return_->add_child(return_keyword);
+        return_->add_child(expr);
+
+        return return_;
+    }
+
     AST* Parser::parse_case()
     {
         consume_blanks();
@@ -495,7 +824,7 @@ namespace brouwer
         case_->add_child(case_keyword);
         case_->add_child(subject_expr);
 
-        get_block(case_, TokenType::case_);
+        get_block(case_, TokenType::caseBranch);
 
         return case_;
     }
@@ -736,13 +1065,87 @@ namespace brouwer
         return lambda;
     }
 
+    AST* Parser::parse_tupleLit()
+    {
+        consume_blanks();
+
+        AST* l_paren = parse_lParen();
+
+        if (!l_paren)
+        {
+            return nullptr;
+        }
+
+        AST* first_expr = parse_expr();
+
+        AST* tupleLit = new AST({ TokenType::tupleLit, "" });
+        tupleLit->add_child(l_paren);
+
+        consume_blanks();
+
+        if (first_expr)
+        {
+            AST* first_comma = parse_comma();
+
+            if (!first_comma)
+            {
+                throw std::runtime_error(
+                    "expected comma after first tuple element"
+                );
+            }
+
+            AST* second_expr = parse_expr();
+
+            if (!second_expr)
+            {
+                throw std::runtime_error(
+                    "expected 0 or at least 2 elements in tuple"
+                );
+            }
+
+            tupleLit->add_child(first_expr);
+            tupleLit->add_child(first_comma);
+            tupleLit->add_child(second_expr);
+
+            consume_blanks();
+
+            while (AST* comma = parse_comma())
+            {
+                AST* expr = parse_expr();
+
+                if (!expr)
+                {
+                    break;
+                }
+
+                tupleLit->add_child(comma);
+                tupleLit->add_child(expr);
+
+                consume_blanks();
+            }
+        }
+
+        AST* r_paren = parse_rParen();
+
+        if (!r_paren)
+        {
+            throw std::runtime_error(
+                "expected right paren to terminate tuple"
+            );
+        }
+
+        tupleLit->add_child(r_paren);
+
+        return tupleLit;
+    }
+
     AST* Parser::parse_listLit()
     {
         consume_blanks();
 
-        AST* lSqBracket = parse_lSqBracket();
+        AST* l_sq_bracket = parse_lSqBracket();
 
-        if (!lSqBracket)
+        if (!l_sq_bracket)
         {
             return nullptr;
         }
@@ -750,7 +1153,7 @@ namespace brouwer
         AST* first_expr = parse_expr();
 
         AST* listLit = new AST({ TokenType::listLit, "" });
-        listLit->add_child(lSqBracket);
+        listLit->add_child(l_sq_bracket);
 
         if (first_expr)
         {
@@ -774,77 +1177,113 @@ namespace brouwer
             }
         }
 
-        AST* rSqBracket = parse_rSqBracket();
+        AST* r_sq_bracket = parse_rSqBracket();
 
-        if (!rSqBracket)
+        if (!r_sq_bracket)
         {
             throw std::runtime_error(
                 "left square bracket in list literal requires ]"
             );
         }
 
-        listLit->add_child(rSqBracket);
+        listLit->add_child(r_sq_bracket);
 
         return listLit;
     }
 
-    AST* Parser::parse_setLit()
+    AST* Parser::parse_listComp()
     {
         consume_blanks();
 
-        AST* lCurlyBracket = parse_lCurlyBracket();
+        AST* l_sq_bracket = parse_lSqBracket();
 
-        if (!lCurlyBracket)
+        if (!l_sq_bracket)
         {
             return nullptr;
         }
 
-        AST* first_expr = parse_expr();
+        AST* expr = parse_expr();
 
-        AST* setLit = new AST({ TokenType::setLit, "" });
-        setLit->add_child(lCurlyBracket);
-
-        if (first_expr)
+        if (!expr)
         {
+            throw std::runtime_error(
+                "expected expression on left-hand side of list comprehension"
+            );
+        }
+
+        AST* bar = parse_bar();
+
+        if (!bar)
+        {
+            throw std::runtime_error("expected | for list comprehension");
+        }
+
+        AST* listComp = new AST({ TokenType::listComp, "" });
+        listComp->add_child(l_sq_bracket);
+        listComp->add_child(expr);
+        listComp->add_child(bar);
+
+        AST* first_generator = parse_generator();
+        AST* first_condition = nullptr;
+
+        if (!first_generator)
+        {
+            first_condition = parse_expr();
+        }
+
+        if (first_generator || first_condition)
+        {
+            if (first_generator)
+            {
+                listComp->add_child(first_generator);
+            }
+            else
+            {
+                listComp->add_child(first_condition);
+            }
+
             consume_blanks();
 
             while (AST* comma = parse_comma())
             {
-                AST* expr = parse_expr();
-
-                if (!expr)
+                if (AST* generator = parse_generator())
+                {
+                    listComp->add_child(generator);
+                }
+                else if (AST* condition = parse_expr())
+                {
+                    listComp->add_child(condition);
+                }
+                else
                 {
                     break;
                 }
-
-                setLit->add_child(comma);
-                setLit->add_child(expr);
 
                 consume_blanks();
             }
         }
 
-        AST* rCurlyBracket = parse_rCurlyBracket();
+        AST* r_sq_bracket = parse_rSqBracket();
 
-        if (!rCurlyBracket)
+        if (!r_sq_bracket)
         {
             throw std::runtime_error(
-                "left curly bracket in set literal requires }"
+                "expected ] to terminate list comprehension"
             );
         }
 
-        setLit->add_child(rCurlyBracket);
+        listComp->add_child(r_sq_bracket);
 
-        return setLit;
+        return listComp;
     }
 
     AST* Parser::parse_dictLit()
     {
         consume_blanks();
 
-        AST* lCurlyBracket = parse_lCurlyBracket();
+        AST* l_curly_bracket = parse_lCurlyBracket();
 
-        if (!lCurlyBracket)
+        if (!l_curly_bracket)
         {
             return nullptr;
         }
@@ -852,7 +1291,7 @@ namespace brouwer
         AST* first_entry = parse_dictEntry();
 
         AST* dictLit = new AST({ TokenType::dictLit, "" });
-        dictLit->add_child(lCurlyBracket);
+        dictLit->add_child(l_curly_bracket);
 
         if (first_entry)
         {
@@ -874,18 +1313,296 @@ namespace brouwer
             }
         }
 
-        AST* rCurlyBracket = parse_rCurlyBracket();
+        AST* r_curly_bracket = parse_rCurlyBracket();
 
-        if (!rCurlyBracket)
+        if (!r_curly_bracket)
         {
             throw std::runtime_error(
                 "left curly bracket in dict literal requires }"
             );
         }
 
-        dictLit->add_child(rCurlyBracket);
+        dictLit->add_child(r_curly_bracket);
 
         return dictLit;
+    }
+
+    AST* Parser::parse_dictComp()
+    {
+        consume_blanks();
+
+        AST* l_curly_bracket = parse_lCurlyBracket();
+
+        if (!l_curly_bracket)
+        {
+            return nullptr;
+        }
+
+        AST* entry = parse_dictEntry();
+
+        if (!entry)
+        {
+            throw std::runtime_error(
+                "expected entry on left-hand side of dict comprehension"
+            );
+        }
+
+        AST* bar = parse_bar();
+
+        if (!bar)
+        {
+            throw std::runtime_error("expected | for dict comprehension");
+        }
+
+        AST* dictComp = new AST({ TokenType::dictComp, "" });
+        dictComp->add_child(l_curly_bracket);
+        dictComp->add_child(entry);
+        dictComp->add_child(bar);
+
+        AST* first_generator = parse_generator();
+        AST* first_condition = nullptr;
+
+        if (!first_generator)
+        {
+            first_condition = parse_expr();
+        }
+
+        if (first_generator || first_condition)
+        {
+            if (first_generator)
+            {
+                dictComp->add_child(first_generator);
+            }
+            else
+            {
+                dictComp->add_child(first_condition);
+            }
+
+            consume_blanks();
+
+            while (AST* comma = parse_comma())
+            {
+                if (AST* generator = parse_generator())
+                {
+                    dictComp->add_child(generator);
+                }
+                else if (AST* condition = parse_expr())
+                {
+                    dictComp->add_child(condition);
+                }
+                else
+                {
+                    break;
+                }
+
+                consume_blanks();
+            }
+        }
+
+        AST* r_curly_bracket = parse_rCurlyBracket();
+
+        if (!r_curly_bracket)
+        {
+            throw std::runtime_error(
+                "expected } to terminate dict comprehension"
+            );
+        }
+
+        dictComp->add_child(r_curly_bracket);
+
+        return dictComp;
+    }
+
+    AST* Parser::parse_setLit()
+    {
+        consume_blanks();
+
+        AST* l_curly_bracket = parse_lCurlyBracket();
+
+        if (!l_curly_bracket)
+        {
+            return nullptr;
+        }
+
+        AST* first_expr = parse_expr();
+
+        AST* setLit = new AST({ TokenType::setLit, "" });
+        setLit->add_child(l_curly_bracket);
+
+        if (first_expr)
+        {
+            consume_blanks();
+
+            while (AST* comma = parse_comma())
+            {
+                AST* expr = parse_expr();
+
+                if (!expr)
+                {
+                    break;
+                }
+
+                setLit->add_child(comma);
+                setLit->add_child(expr);
+
+                consume_blanks();
+            }
+        }
+
+        AST* r_curly_bracket = parse_rCurlyBracket();
+
+        if (!r_curly_bracket)
+        {
+            throw std::runtime_error(
+                "left curly bracket in set literal requires }"
+            );
+        }
+
+        setLit->add_child(r_curly_bracket);
+
+        return setLit;
+    }
+
+    AST* Parser::parse_setComp()
+    {
+        consume_blanks();
+
+        AST* l_curly_bracket = parse_lCurlyBracket();
+
+        if (!l_curly_bracket)
+        {
+            return nullptr;
+        }
+
+        AST* expr = parse_expr();
+
+        if (!expr)
+        {
+            throw std::runtime_error(
+                "expected expression on left-hand side of set comprehension"
+            );
+        }
+
+        AST* bar = parse_bar();
+
+        if (!bar)
+        {
+            throw std::runtime_error("expected | for set comprehension");
+        }
+
+        AST* setComp = new AST({ TokenType::setComp, "" });
+        setComp->add_child(l_curly_bracket);
+        setComp->add_child(expr);
+        setComp->add_child(bar);
+
+        AST* first_generator = parse_generator();
+        AST* first_condition = nullptr;
+
+        if (!first_generator)
+        {
+            first_condition = parse_expr();
+        }
+
+        if (first_generator || first_condition)
+        {
+            if (first_generator)
+            {
+                setComp->add_child(first_generator);
+            }
+            else
+            {
+                setComp->add_child(first_condition);
+            }
+
+            consume_blanks();
+
+            while (AST* comma = parse_comma())
+            {
+                if (AST* generator = parse_generator())
+                {
+                    setComp->add_child(generator);
+                }
+                else if (AST* condition = parse_expr())
+                {
+                    setComp->add_child(condition);
+                }
+                else
+                {
+                    break;
+                }
+
+                consume_blanks();
+            }
+        }
+
+        AST* r_curly_bracket = parse_rCurlyBracket();
+
+        if (!r_curly_bracket)
+        {
+            throw std::runtime_error(
+                "expected } to terminate set comprehension"
+            );
+        }
+
+        setComp->add_child(r_curly_bracket);
+
+        return setComp;
+    }
+
+    AST* Parser::parse_qualIdent()
+    {
+        consume_blanks();
+
+        if (AST* member_ident = parse_memberIdent())
+        {
+            AST* qual_ident = new AST({ TokenType::qualIdent, "" });
+            qual_ident->add_child(member_ident);
+
+            return qual_ident;
+        }
+
+        if (AST* scoped_ident = parse_scopedIdent())
+        {
+            AST* qual_ident = new AST({ TokenType::qualIdent, "" });
+            qual_ident->add_child(scoped_ident);
+
+            return qual_ident;
+        }
+
+        if (AST* ident = parse_ident())
+        {
+            AST* qual_ident = new AST({ TokenType::qualIdent, "" });
+            qual_ident->add_child(ident);
+
+            return qual_ident;
+        }
+
+        return nullptr;
+    }
+
+    AST* Parser::parse_namespacedIdent()
+    {
+        consume_blanks();
+
+        if (AST* scoped_ident = parse_scopedIdent())
+        {
+            AST* namespaced_ident =
+                new AST({ TokenType::namespacedIdent, "" });
+            namespaced_ident->add_child(scoped_ident);
+
+            return namespaced_ident;
+        }
+
+        if (AST* ident = parse_ident())
+        {
+            AST* namespaced_ident =
+                new AST({ TokenType::namespacedIdent, "" });
+            namespaced_ident->add_child(ident);
+
+            return namespaced_ident;
+        }
+
+        return nullptr;
     }
 
     AST* Parser::parse_ident()
@@ -926,131 +1643,482 @@ namespace brouwer
         return new AST({ TokenType::ident, id });
     }
 
-    AST* Parser::parse_var()
+    AST* Parser::parse_memberIdent()
     {
-        AST* var_keyword = parse_varKeyword();
+        AST* first_ident = parse_ident();
 
-        if (!var_keyword)
+        if (!first_ident)
         {
             return nullptr;
         }
 
-        AST* pattern = parse_pattern();
+        AST* dot = parse_dot();
 
-        if (!pattern)
+        if (!dot)
         {
-            throw std::runtime_error(
-                "left-hand side of var assignment must be a pattern"
-            );
-        }
+            const std::string& first_ident_lex = first_ident->val().lexeme;
 
-        consume_blanks();
-
-        AST* var = new AST({ TokenType::var, "" });
-        var->add_child(var_keyword);
-        var->add_child(pattern);
-
-        if (AST* colon = parse_colon())
-        {
-            AST* type = parse_ident();
-
-            if (!type)
+            for (auto i = first_ident_lex.length() - 1; i >= 0; --i)
             {
-                throw std::runtime_error(
-                    "type of var binding must be a valid identifier"
-                );
+                this->charhistory.push_front(first_ident_lex[i]);
             }
 
-            var->add_child(colon);
-            var->add_child(type);
+            return nullptr;
         }
 
-        AST* equals = parse_equals();
+        AST* second_ident = parse_ident();
 
-        if (!equals)
+        if (!second_ident)
         {
-            throw std::runtime_error("var assignment must use =");
+            throw std::runtime_error("expected identifier after dot operator");
         }
 
-        AST* expr = parse_expr();
+        AST* memberIdent = new AST({ TokenType::memberIdent, "" });
+        memberIdent->add_child(first_ident);
+        memberIdent->add_child(dot);
+        memberIdent->add_child(second_ident);
 
-        if (!expr)
-        {
-            throw std::runtime_error(
-                "right-hand side of var assignment must be a valid expression"
-            );
-        }
-
-        var->add_child(equals);
-        var->add_child(expr);
-
-        return var;
+        return memberIdent;
     }
 
-    AST* Parser::parse_assign()
+    AST* Parser::parse_scopedIdent()
     {
-        AST* pattern = parse_pattern();
+        AST* first_ident = parse_ident();
 
-        if (!pattern)
+        if (!first_ident)
         {
             return nullptr;
         }
 
-        consume_blanks();
+        AST* double_colon = parse_doubleColon();
 
-        AST* assign = new AST({ TokenType::assign, "" });
-        assign->add_child(pattern);
-
-        if (AST* colon = parse_colon())
+        if (!double_colon)
         {
-            AST* type = parse_ident();
+            const std::string& first_ident_lex = first_ident->val().lexeme;
 
-            if (!type)
+            for (auto i = first_ident_lex.length() - 1; i >= 0; --i)
+            {
+                this->charhistory.push_front(first_ident_lex[i]);
+            }
+
+            return nullptr;
+        }
+
+        AST* second_ident = parse_ident();
+
+        if (!second_ident)
+        {
+            throw std::runtime_error("expected identifier after dot operator");
+        }
+
+        AST* scopedIdent = new AST({ TokenType::scopedIdent, "" });
+        scopedIdent->add_child(first_ident);
+        scopedIdent->add_child(double_colon);
+        scopedIdent->add_child(second_ident);
+
+        return scopedIdent;
+    }
+
+    AST* Parser::parse_typeIdent()
+    {
+        if (AST* namespaced_ident = parse_namespacedIdent())
+        {
+            AST* type_ident = new AST({ TokenType::typeIdent, "" });
+            type_ident->add_child(namespaced_ident);
+
+            return type_ident;
+        }
+
+        if (AST* l_paren = parse_lParen())
+        {
+            AST* first_ident = parse_typeIdent();
+
+            AST* typeIdent = new AST({ TokenType::typeIdent, "" });
+            typeIdent->add_child(l_paren);
+
+            consume_blanks();
+
+            if (first_ident)
+            {
+                AST* first_comma = parse_comma();
+
+                if (!first_comma)
+                {
+                    throw std::runtime_error(
+                        "expected comma after first type tuple element"
+                    );
+                }
+
+                AST* second_ident = parse_typeIdent();
+
+                if (!second_ident)
+                {
+                    throw std::runtime_error(
+                        "expected 0 or at least 2 elements in type tuple"
+                    );
+                }
+
+                typeIdent->add_child(first_ident);
+                typeIdent->add_child(first_comma);
+                typeIdent->add_child(second_ident);
+
+                consume_blanks();
+
+                while (AST* comma = parse_comma())
+                {
+                    AST* ident = parse_typeIdent();
+
+                    if (!ident)
+                    {
+                        break;
+                    }
+
+                    typeIdent->add_child(comma);
+                    typeIdent->add_child(ident);
+
+                    consume_blanks();
+                }
+            }
+
+            AST* r_paren = parse_rParen();
+
+            if (!r_paren)
             {
                 throw std::runtime_error(
-                    "type of binding must be a valid identifier"
+                    "expected right paren to terminate type tuple"
                 );
             }
 
-            assign->add_child(colon);
-            assign->add_child(type);
+            typeIdent->add_child(r_paren);
+
+            return typeIdent;
         }
 
-        consume_blanks();
-
-        AST* equals = parse_equals();
-
-        if (!equals)
+        if (AST* l_sq_bracket = parse_lSqBracket())
         {
-            this->charhistory.push_front(this->ch);
-            this->charhistory.push_front(' ');
+            AST* ident = parse_typeIdent();
 
-            std::string consumed_pattern = str_repr(pattern);
-
-            while (consumed_pattern.length() > 1)
+            if (!ident)
             {
-                this->charhistory.push_front(consumed_pattern.back());
-                consumed_pattern.pop_back();
+                throw std::runtime_error("expected type identifier after [");
             }
 
-            this->ch = consumed_pattern.back();
+            AST* r_sq_bracket = parse_rSqBracket();
+
+            if (!r_sq_bracket)
+            {
+                throw std::runtime_error("expected closing ] of list type");
+            }
+
+            AST* typeIdent = new AST({ TokenType::typeIdent, "" });
+            typeIdent->add_child(l_sq_bracket);
+            typeIdent->add_child(ident);
+            typeIdent->add_child(r_sq_bracket);
+
+            return typeIdent;
+        }
+
+        if (AST* l_curly_bracket = parse_lCurlyBracket())
+        {
+            AST* ident = parse_typeIdent();
+
+            if (!ident)
+            {
+                throw std::runtime_error("expected type identifier after {");
+            }
+
+            consume_blanks();
+
+            AST* typeIdent = new AST({ TokenType::typeIdent, "" });
+            typeIdent->add_child(l_curly_bracket);
+            typeIdent->add_child(ident);
+
+            AST* comma = parse_comma();
+
+            if (comma)
+            {
+                AST* second_ident = parse_typeIdent();
+
+                if (!second_ident)
+                {
+                    throw std::runtime_error(
+                        "expected type identifier after ,"
+                    );
+                }
+
+                typeIdent->add_child(comma);
+                typeIdent->add_child(second_ident);
+            }
+
+            AST* r_curly_bracket = parse_rCurlyBracket();
+
+            if (!r_curly_bracket)
+            {
+                throw std::runtime_error(
+                    "expected closing } of dict/set type"
+                );
+            }
+
+            typeIdent->add_child(r_curly_bracket);
+
+            return typeIdent;
+        }
+
+        return nullptr;
+    }
+
+    AST* Parser::parse_op()
+    {
+        consume_blanks();
+
+        std::string op = "";
+
+        while (optional<char> op_char = expect_char_of(op_chars))
+        {
+            op.push_back(*op_char);
+        }
+
+        if (op.empty())
+        {
+            return nullptr;
+        }
+
+        if (reserved_ops.find(op) != reserved_ops.end())
+        {
+            throw std::runtime_error("the operator " + op + " is reserved");
+        }
+
+        return new AST({ TokenType::op, op });
+    }
+
+    AST* Parser::parse_numLit()
+    {
+        consume_blanks();
+
+        AST* minus = nullptr;
+
+        if (expect_op("-"))
+        {
+            minus = new AST({ TokenType::minus, "-" });
+
+            consume_blanks();
+        }
+
+        if (expect_keyword("NaN"))
+        {
+            AST* numLit = new AST({ TokenType::numLit, "" });
+            AST* real_lit = new AST({ TokenType::realLit, "" });
+
+            if (minus)
+            {
+                real_lit->add_child(minus);
+            }
+
+            real_lit->add_child(new AST({ TokenType::nanKeyword, "NaN" }));
+            numLit->add_child(real_lit);
+
+            return numLit;
+        }
+
+        if (expect_keyword("Infinity"))
+        {
+            AST* numLit = new AST({ TokenType::numLit, "" });
+            AST* real_lit = new AST({ TokenType::realLit, "" });
+
+            if (minus)
+            {
+                real_lit->add_child(minus);
+            }
+
+            real_lit->add_child(
+                new AST({ TokenType::infinityKeyword, "Infinity" })
+            );
+            numLit->add_child(real_lit);
+
+            return numLit;
+        }
+
+        if (!isdigit(this->ch))
+        {
+            this->charhistory.push_front(' ');
+            this->charhistory.push_front('-');
 
             return nullptr;
         }
 
-        AST* expr = parse_expr();
+        std::string s = "";
 
-        if (!expr)
+        while (isdigit(this->ch))
+        {
+            s.push_back(this->ch);
+
+            if (advance())
+            {
+                break;
+            }
+        }
+
+        if (this->ch != '.')
+        {
+            AST* numLit = new AST({ TokenType::numLit, "" });
+            AST* int_lit = new AST({ TokenType::intLit, "" });
+
+            if (minus)
+            {
+                int_lit->add_child(minus);
+            }
+
+            int_lit->add_child(new AST({ TokenType::absInt, s }));
+            numLit->add_child(int_lit);
+
+            return numLit;
+        }
+
+        s.push_back(this->ch);
+        advance();
+
+        if (!isdigit(this->ch))
         {
             throw std::runtime_error(
-                "right-hand side of assignment must be a valid expression"
+                "expected at least one digit after decimal point"
             );
         }
 
-        assign->add_child(equals);
-        assign->add_child(expr);
+        while (isdigit(this->ch))
+        {
+            s.push_back(this->ch);
 
-        return assign;
+            if (advance())
+            {
+                break;
+            }
+        }
+
+        AST* numLit = new AST({ TokenType::numLit, "" });
+        AST* real_lit = new AST({ TokenType::realLit, "" });
+
+        if (minus)
+        {
+            real_lit->add_child(minus);
+        }
+
+        real_lit->add_child(new AST({ TokenType::absReal, s }));
+        numLit->add_child(real_lit);
+
+        return numLit;
+    }
+
+    AST* Parser::parse_chrLit()
+    {
+        consume_blanks();
+
+        AST* init_singleQuote = parse_singleQuote();
+
+        if (!init_singleQuote)
+        {
+            return nullptr;
+        }
+
+        AST* the_char = parse_chrChr();
+
+        if (!the_char)
+        {
+            throw std::runtime_error("unexpected ' or EOF");
+        }
+
+        AST* end_singleQuote = parse_singleQuote();
+
+        if (!end_singleQuote)
+        {
+            std::string err_msg = "expected ', got: ";
+            err_msg += this->ch;
+
+            throw std::runtime_error(err_msg);
+        }
+
+        AST* chrLit = new AST({ TokenType::chrLit, "" });
+        chrLit->add_child(init_singleQuote);
+        chrLit->add_child(the_char);
+        chrLit->add_child(end_singleQuote);
+
+        return chrLit;
+    }
+
+    AST* Parser::parse_strLit()
+    {
+        consume_blanks();
+
+        AST* strLit = new AST({ TokenType::strLit, "" });
+
+        AST* init_doubleQuote = parse_doubleQuote();
+
+        if (!init_doubleQuote)
+        {
+            return nullptr;
+        }
+
+        strLit->add_child(init_doubleQuote);
+
+        while (this->ch != '"')
+        {
+            if (AST* a_char = parse_strChr())
+            {
+                strLit->add_child(a_char);
+            }
+            else
+            {
+                throw std::runtime_error(
+                    "invalid escape sequence or unexpected EOF"
+                );
+            }
+        }
+
+        AST* end_doubleQuote = parse_doubleQuote();
+
+        if (!end_doubleQuote)
+        {
+            std::string err_msg = "expected \", got: ";
+            err_msg += this->ch;
+
+            throw std::runtime_error(err_msg);
+        }
+
+        strLit->add_child(end_doubleQuote);
+
+        return strLit;
+    }
+
+    AST* Parser::parse_infixed()
+    {
+        consume_blanks();
+
+        AST* first_backtick = parse_backtick();
+
+        if (!first_backtick)
+        {
+            return nullptr;
+        }
+
+        AST* ident = parse_qualIdent();
+
+        if (!ident)
+        {
+            throw std::runtime_error("expected identifier after `");
+        }
+
+        AST* second_backtick = parse_backtick();
+
+        if (!second_backtick)
+        {
+            throw std::runtime_error("expected closing `");
+        }
+
+        AST* infixed = new AST({ TokenType::infixed, "" });
+        infixed->add_child(first_backtick);
+        infixed->add_child(ident);
+        infixed->add_child(second_backtick);
+
+        return infixed;
     }
 
     AST* Parser::parse_pattern()
@@ -1093,6 +2161,8 @@ namespace brouwer
 
             return pattern;
         }
+
+        /////////////////////////////////////////////////////
 
         if (AST* lSqBracket = parse_lSqBracket())
         {
@@ -1253,9 +2323,9 @@ namespace brouwer
     {
         consume_blanks();
 
-        AST* ident = parse_ident();
+        AST* key = parse_expr();
 
-        if (!ident)
+        if (!key)
         {
             return nullptr;
         }
@@ -1279,7 +2349,7 @@ namespace brouwer
         }
 
         AST* dictEntry = new AST({ TokenType::dictEntry, "" });
-        dictEntry->add_child(ident);
+        dictEntry->add_child(key);
         dictEntry->add_child(equals);
         dictEntry->add_child(val);
 
@@ -2049,8 +3119,8 @@ namespace brouwer
             case TokenType::expr:
                 first_item = parse_expr();
                 break;
-            case TokenType::case_:
-                first_item = parse_case();
+            case TokenType::caseBranch:
+                first_item = parse_caseBranch();
                 break;
             default:
                 throw std::logic_error("unhandled body item type");
@@ -2079,8 +3149,8 @@ namespace brouwer
                 case TokenType::expr:
                     item = parse_expr();
                     break;
-                case TokenType::case_:
-                    item = parse_case();
+                case TokenType::caseBranch:
+                    item = parse_caseBranch();
                     break;
                 default:
                     throw std::logic_error("unhandled body item type");

@@ -9,6 +9,7 @@ namespace brouwer
     {
           root
         , prog
+        , stmt
         , expr
         , chrLit
         , strLit
@@ -67,6 +68,7 @@ namespace brouwer
     {
           {TokenType::root,          "root"}
         , {TokenType::prog,          "prog"}
+        , {TokenType::stmt,          "stmt"}
         , {TokenType::expr,          "expr"}
         , {TokenType::chrLit,        "chrLit"}
         , {TokenType::strLit,        "strLit"}
