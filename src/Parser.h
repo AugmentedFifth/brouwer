@@ -19,11 +19,11 @@ namespace brouwer
 
             Parser(std::string& filename);
 
-            AST* parse();
+            std::optional<AST> parse();
 
-            static std::string str_repr(const AST* ast) noexcept;
+            static std::string str_repr(const AST& ast) noexcept;
 
-            static void log_depthfirst(const AST* ast, size_t cur_depth);
+            static void log_depthfirst(const AST& ast, size_t cur_depth);
 
             static bool isnewline(char c) noexcept;
 
@@ -43,103 +43,167 @@ namespace brouwer
 
             static const std::unordered_set<char> op_chars;
 
-            AST* parse_prog();
+            static const std::unordered_set<std::string> reserved_ops;
 
-            AST* parse_stmt();
+            std::optional<AST> parse_prog();
 
-            AST* parse_expr();
+            std::optional<AST> parse_modDecl();
 
-            AST* parse_chrLit();
+            std::optional<AST> parse_import();
 
-            AST* parse_strLit();
+            std::optional<AST> parse_line();
 
-            AST* parse_numLit();
+            bool consume_lineComment();
 
-            AST* parse_fnDecl();
+            std::optional<AST> parse_expr();
 
-            AST* parse_parened();
+            std::optional<AST> parse_subexpr();
 
-            AST* parse_case();
+            std::optional<AST> parse_chrLit();
 
-            AST* parse_ifElse();
+            std::optional<AST> parse_strLit();
 
-            AST* parse_try();
+            std::optional<AST> parse_numLit();
 
-            AST* parse_while();
+            std::optional<AST> parse_fnDecl();
 
-            AST* parse_for();
+            std::optional<AST> parse_parened();
 
-            AST* parse_lambda();
+            std::optional<AST> parse_return();
 
-            AST* parse_listLit();
+            std::optional<AST> parse_case();
 
-            AST* parse_setLit();
+            std::optional<AST> parse_caseBranch();
 
-            AST* parse_dictLit();
+            std::optional<AST> parse_ifElse();
 
-            AST* parse_ident();
+            std::optional<AST> parse_try();
 
-            AST* parse_var();
+            std::optional<AST> parse_while();
 
-            AST* parse_assign();
+            std::optional<AST> parse_for();
 
-            AST* parse_pattern();
+            std::optional<AST> parse_lambda();
 
-            AST* parse_chrChr();
+            std::optional<AST> parse_tupleLit();
 
-            AST* parse_strChr();
+            std::optional<AST> parse_listLit();
 
-            AST* parse_param();
+            std::optional<AST> parse_listComp();
 
-            AST* parse_dictEntry();
+            std::optional<AST> parse_dictLit();
 
-            AST* parse_equals();
+            std::optional<AST> parse_dictComp();
 
-            AST* parse_singleQuote();
+            std::optional<AST> parse_setLit();
 
-            AST* parse_doubleQuote();
+            std::optional<AST> parse_setComp();
 
-            AST* parse_fnKeyword();
+            std::optional<AST> parse_qualIdent();
 
-            AST* parse_caseKeyword();
+            std::optional<AST> parse_namespacedIdent();
 
-            AST* parse_ifKeyword();
+            std::optional<AST> parse_op();
 
-            AST* parse_elseKeyword();
+            std::optional<AST> parse_infixed();
 
-            AST* parse_tryKeyword();
+            std::optional<AST> parse_ident();
 
-            AST* parse_catchKeyword();
+            std::optional<AST> parse_memberIdent();
 
-            AST* parse_whileKeyword();
+            std::optional<AST> parse_scopedIdent();
 
-            AST* parse_forKeyword();
+            std::optional<AST> parse_typeIdent();
 
-            AST* parse_inKeyword();
+            std::optional<AST> parse_var();
 
-            AST* parse_varKeyword();
+            std::optional<AST> parse_assign();
 
-            AST* parse_comma();
+            std::optional<AST> parse_pattern();
 
-            AST* parse_colon();
+            std::optional<AST> parse_chrChr();
 
-            AST* parse_underscore();
+            std::optional<AST> parse_strChr();
 
-            AST* parse_arrow();
+            std::optional<AST> parse_param();
 
-            AST* parse_lParen();
+            std::optional<AST> parse_generator();
 
-            AST* parse_rParen();
+            std::optional<AST> parse_dictEntry();
 
-            AST* parse_lSqBracket();
+            std::optional<AST> parse_equals();
 
-            AST* parse_rSqBracket();
+            std::optional<AST> parse_singleQuote();
 
-            AST* parse_lCurlyBracket();
+            std::optional<AST> parse_doubleQuote();
 
-            AST* parse_rCurlyBracket();
+            std::optional<AST> parse_fnKeyword();
 
-            AST* parse_backslash();
+            std::optional<AST> parse_caseKeyword();
+
+            std::optional<AST> parse_ifKeyword();
+
+            std::optional<AST> parse_elseKeyword();
+
+            std::optional<AST> parse_tryKeyword();
+
+            std::optional<AST> parse_catchKeyword();
+
+            std::optional<AST> parse_whileKeyword();
+
+            std::optional<AST> parse_forKeyword();
+
+            std::optional<AST> parse_inKeyword();
+
+            std::optional<AST> parse_varKeyword();
+
+            std::optional<AST> parse_moduleKeyword();
+
+            std::optional<AST> parse_exposingKeyword();
+
+            std::optional<AST> parse_hidingKeyword();
+
+            std::optional<AST> parse_importKeyword();
+
+            std::optional<AST> parse_asKeyword();
+
+            std::optional<AST> parse_returnKeyword();
+
+            bool consume_lineCommentOp();
+
+            std::optional<AST> parse_dot();
+
+            std::optional<AST> parse_comma();
+
+            std::optional<AST> parse_colon();
+
+            std::optional<AST> parse_doubleColon();
+
+            std::optional<AST> parse_underscore();
+
+            std::optional<AST> parse_lArrow();
+
+            std::optional<AST> parse_rArrow();
+
+            std::optional<AST> parse_fatRArrow();
+
+            std::optional<AST> parse_lParen();
+
+            std::optional<AST> parse_rParen();
+
+            std::optional<AST> parse_lSqBracket();
+
+            std::optional<AST> parse_rSqBracket();
+
+            std::optional<AST> parse_lCurlyBracket();
+
+            std::optional<AST> parse_rCurlyBracket();
+
+            std::optional<AST> parse_backslash();
+
+            std::optional<AST> parse_bar();
+
+            std::optional<AST> parse_backtick();
 
             bool advance() noexcept;
 
@@ -153,7 +217,7 @@ namespace brouwer
 
             bool expect_op(const std::string& op);
 
-            std::string get_block(AST* main_ast, TokenType body_item_type);
+            std::string get_block(AST& main_ast, TokenType body_item_type);
 
             bool expect_char(char c) noexcept;
 

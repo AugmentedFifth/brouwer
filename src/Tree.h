@@ -10,20 +10,14 @@ namespace brouwer
         private:
             T value;
 
-            std::vector<Tree<T>*> children;
+            std::vector<Tree<T>> children;
 
         public:
             Tree(T val) noexcept : value(val) {}
 
-            ~Tree() noexcept
-            {
-                for (Tree<T>* child_ptr : this->children)
-                {
-                    delete child_ptr;
-                }
-            }
+            Tree(const Tree<T>& that) = default;
 
-            void add_child(Tree<T>* child) noexcept
+            void add_child(Tree<T>&& child) noexcept
             {
                 this->children.push_back(child);
             }
@@ -38,12 +32,12 @@ namespace brouwer
                 return this->children.size();
             }
 
-            const Tree<T>* const operator[](size_t i) const noexcept
+            const Tree<T>& operator[](size_t i) const noexcept
             {
                 return this->children[i];
             }
 
-            const Tree<T>* const get_child(size_t i) const noexcept
+            const Tree<T>& get_child(size_t i) const noexcept
             {
                 return this->children[i];
             }

@@ -21,7 +21,7 @@ int main(int argc, char* argv[])
     std::string filename(argv[1]);
 
     Parser parser = { filename };
-    const AST* ast;
+    std::optional<AST> ast;
 
     try
     {
@@ -52,7 +52,14 @@ int main(int argc, char* argv[])
         return 3;
     }
 
-    Parser::log_depthfirst(ast, 0);
+    if (!ast)
+    {
+        std::cout << "ast == nullopt" << std::endl;
+
+        return 1;
+    }
+
+    Parser::log_depthfirst(*ast, 0);
     std::cout << std::endl;
 
     return 0;
