@@ -17,7 +17,7 @@ namespace brouwer
         public:
             using AST = Tree<Token>;
 
-            Parser(std::string& filename);
+            Parser(const std::string& filename);
 
             std::optional<AST> parse();
 
@@ -51,9 +51,9 @@ namespace brouwer
 
             std::optional<AST> parse_import();
 
-            std::optional<AST> parse_line();
+            std::optional<AST> parse_line(bool consume_newline);
 
-            bool consume_lineComment();
+            bool consume_lineComment(bool consume_newline);
 
             std::optional<AST> parse_expr();
 

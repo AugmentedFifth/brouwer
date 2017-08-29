@@ -34,7 +34,7 @@ namespace brouwer
         ".", "::"
     };
 
-    Parser::Parser(std::string& filename) : charstream(filename.c_str())
+    Parser::Parser(const std::string& filename) : charstream(filename.c_str())
     {
         this->currentindent = "";
 
@@ -156,7 +156,7 @@ namespace brouwer
 
         while (!this->charstream.eof() || !this->charhistory.empty())
         {
-            std::optional<AST> line = parse_line();
+            std::optional<AST> line = parse_line(true);
 
             if (!line)
             {
@@ -192,6 +192,7 @@ namespace brouwer
 
         mod_decl.add_child(std::move(*mod_name));
 
+        consume_blanks();
         std::optional<AST> exposing_keyword = parse_exposingKeyword();
         std::optional<AST> hiding_keyword = {};
 
@@ -273,6 +274,7 @@ namespace brouwer
 
         import.add_child(std::move(*mod_name));
 
+        consume_blanks();
         std::optional<AST> as_keyword = parse_asKeyword();
 
         if (as_keyword)
@@ -364,7 +366,7 @@ namespace brouwer
         return import;
     }
 
-    std::optional<AST> Parser::parse_line()
+    std::optional<AST> Parser::parse_line(bool consume_newline)
     {
         consume_blanks();
 
@@ -377,12 +379,17 @@ namespace brouwer
             line.add_child(std::move(*expr));
         }
 
-        consume_lineComment();
+        consume_lineComment(consume_newline);
+
+        if (consume_newline)
+        {
+            expect_newline();
+        }
 
         return line;
     }
 
-    bool Parser::consume_lineComment()
+    bool Parser::consume_lineComment(bool consume_newline)
     {
         consume_blanks();
 
@@ -393,7 +400,10 @@ namespace brouwer
 
         if (isnewline(this->ch))
         {
-            expect_newline();
+            if (consume_newline)
+            {
+                expect_newline();
+            }
 
             return true;
         }
@@ -405,7 +415,10 @@ namespace brouwer
 
             if (isnewline(this->ch))
             {
-                expect_newline();
+                if (consume_newline)
+                {
+                    expect_newline();
+                }
 
                 return true;
             }
@@ -415,7 +428,10 @@ namespace brouwer
         {
             if (isnewline(this->ch))
             {
-                expect_newline();
+                if (consume_newline)
+                {
+                    expect_newline();
+                }
 
                 return true;
             }
@@ -438,17 +454,8 @@ namespace brouwer
         AST expr({ TokenType::expr, "" });
         expr.add_child(std::move(*first_subexpr));
 
-        while (!expect_newline())
+        while (std::optional<AST> subexpr = parse_subexpr())
         {
-            std::optional<AST> subexpr = parse_subexpr();
-
-            if (!subexpr)
-            {
-                throw std::runtime_error(
-                    "missing subexpression in expression"
-                );
-            }
-
             expr.add_child(std::move(*subexpr));
         }
 
@@ -720,16 +727,18 @@ namespace brouwer
 
         while (std::optional<AST> fn_param = parse_param())
         {
+            std::cout << "param: " << str_repr(*fn_param) << std::endl;
             fnDecl.add_child(std::move(*fn_param));
         }
 
         consume_blanks();
+        std::cout << "''" << this->ch << "''" << std::endl;
+        std::optional<AST> r_arrow = parse_rArrow();
 
-        std::optional<AST> arrow = parse_rArrow();
-
-        if (arrow)
+        if (r_arrow)
         {
-            fnDecl.add_child(std::move(*arrow));
+            std::cout << "arr" << std::endl;
+            fnDecl.add_child(std::move(*r_arrow));
 
             std::optional<AST> ret_type = parse_qualIdent();
 
@@ -741,7 +750,7 @@ namespace brouwer
             fnDecl.add_child(std::move(*ret_type));
         }
 
-        get_block(fnDecl, TokenType::expr);
+        get_block(fnDecl, TokenType::line);
 
         return fnDecl;
     }
@@ -851,7 +860,7 @@ namespace brouwer
             throw std::runtime_error("expected => while parsing case branch");
         }
 
-        std::optional<AST> line = parse_line();
+        std::optional<AST> line = parse_line(false);
 
         if (!line)
         {
@@ -890,7 +899,7 @@ namespace brouwer
         ifElse.add_child(std::move(*if_keyword));
         ifElse.add_child(std::move(*if_condition));
 
-        const std::string start_indent = get_block(ifElse, TokenType::expr);
+        const std::string start_indent = get_block(ifElse, TokenType::line);
 
         if (this->currentindent != start_indent)
         {
@@ -913,7 +922,7 @@ namespace brouwer
             return ifElse;
         }
 
-        get_block(ifElse, TokenType::expr);
+        get_block(ifElse, TokenType::line);
 
         return ifElse;
     }
@@ -934,7 +943,7 @@ namespace brouwer
         AST try_({ TokenType::try_, "" });
         try_.add_child(std::move(*try_keyword));
 
-        const std::string start_indent = get_block(try_, TokenType::expr);
+        const std::string start_indent = get_block(try_, TokenType::line);
 
         if (this->currentindent != start_indent)
         {
@@ -960,7 +969,7 @@ namespace brouwer
         try_.add_child(std::move(*catch_keyword));
         try_.add_child(std::move(*exception_ident));
 
-        get_block(try_, TokenType::expr);
+        get_block(try_, TokenType::line);
 
         return try_;
     }
@@ -989,7 +998,7 @@ namespace brouwer
         while_.add_child(std::move(*while_keyword));
         while_.add_child(std::move(*while_condition));
 
-        get_block(while_, TokenType::expr);
+        get_block(while_, TokenType::line);
 
         return while_;
     }
@@ -1038,7 +1047,7 @@ namespace brouwer
         for_.add_child(std::move(*in_keyword));
         for_.add_child(std::move(*iterated));
 
-        get_block(for_, TokenType::expr);
+        get_block(for_, TokenType::line);
 
         return for_;
     }
@@ -1693,12 +1702,14 @@ namespace brouwer
         {
             const std::string& first_ident_lex = first_ident->val().lexeme;
 
+            this->charhistory.push_front(this->ch);
+
             for (auto i = first_ident_lex.length() - 1; i > 0; --i)
             {
                 this->charhistory.push_front(first_ident_lex[i]);
             }
 
-            this->charhistory.push_front(first_ident_lex[0]);
+            this->ch = first_ident_lex[0];
 
             return {};
         }
@@ -1733,12 +1744,14 @@ namespace brouwer
         {
             const std::string& first_ident_lex = first_ident->val().lexeme;
 
+            this->charhistory.push_front(this->ch);
+
             for (auto i = first_ident_lex.length() - 1; i > 0; --i)
             {
                 this->charhistory.push_front(first_ident_lex[i]);
             }
 
-            this->charhistory.push_front(first_ident_lex[0]);
+            this->ch = first_ident_lex[0];
 
             return {};
         }
@@ -1760,6 +1773,10 @@ namespace brouwer
 
     std::optional<AST> Parser::parse_typeIdent()
     {
+        consume_blanks();
+
+        std::cout << "shiddd: " << this->ch << std::endl;
+
         if (std::optional<AST> namespaced_ident = parse_namespacedIdent())
         {
             AST type_ident({ TokenType::typeIdent, "" });
@@ -1841,6 +1858,10 @@ namespace brouwer
             {
                 throw std::runtime_error("expected type identifier after [");
             }
+
+            std::cout << str_repr(*ident) << std::endl;
+
+            std::cout << "'" << this->ch << "'" << std::endl;
 
             std::optional<AST> r_sq_bracket = parse_rSqBracket();
 
@@ -1979,8 +2000,11 @@ namespace brouwer
 
         if (!isdigit(this->ch))
         {
-            this->charhistory.push_front(' ');
-            this->charhistory.push_front('-');
+            if (minus)
+            {
+                this->charhistory.push_front(' ');
+                this->charhistory.push_front('-');
+            }
 
             return {};
         }
@@ -2476,6 +2500,7 @@ namespace brouwer
                 return {};
             }
 
+            consume_blanks();
             std::optional<AST> colon = parse_colon();
 
             if (!colon)
@@ -3026,6 +3051,8 @@ namespace brouwer
     {
         consume_blanks();
 
+        std::cout << "NEWYOUYOUYOU" << std::endl;
+
         if (!isnewline(this->ch))
         {
             return false;
@@ -3346,6 +3373,8 @@ namespace brouwer
 
         size_t i = 0;
 
+        std::cout << "1" << std::endl;
+
         if (this->ch != op[i])
         {
             return false;
@@ -3354,10 +3383,13 @@ namespace brouwer
         i++;
         std::vector<char> historicstack;
 
+        std::cout << "12" << std::endl;
+
         while (i < op.length() && !this->charhistory.empty())
         {
             if (this->charhistory.front() != op[i])
             {
+                std::cout << "<<" << this->charhistory.front() << ">>" << std::endl;
                 while (historicstack.size() > 1)
                 {
                     this->charhistory.push_front(historicstack.back());
@@ -3376,12 +3408,16 @@ namespace brouwer
             this->ch = this->charhistory.front();
             this->charhistory.pop_front();
 
+            std::cout << "2" << std::endl;
+
             i++;
         }
 
         if (i == op.length())
         {
             bool not_op;
+
+            std::cout << "3" << std::endl;
 
             if (this->charhistory.empty())
             {
@@ -3426,6 +3462,7 @@ namespace brouwer
         ) {
             if (this->ch != op[i])
             {
+                std::cout << "4" << std::endl;
                 while (historicstack.size() > 1)
                 {
                     this->charhistory.push_front(historicstack.back());
@@ -3442,7 +3479,7 @@ namespace brouwer
 
             i++;
         }
-
+        std::cout << "5" << std::endl;
         this->charstream >> std::noskipws >> this->ch;
 
         if (op_chars.find(this->ch) != op_chars.end())
@@ -3464,6 +3501,8 @@ namespace brouwer
             this->charhistory.pop_back();
         }
 
+        std::cout << "6" << std::endl;
+
         return i == op.length();
     }
 
@@ -3475,7 +3514,7 @@ namespace brouwer
         {
             throw std::runtime_error("expected newline after header");
         }
-
+        std::cout << "AROOOOOOOOOOOOOO" << std::endl;
         const std::string block_indent = this->currentindent;
 
         if (
@@ -3489,10 +3528,12 @@ namespace brouwer
 
         std::optional<AST> first_item;
 
+        std::cout << "POO" << std::endl;
+
         switch (body_item_type)
         {
-            case TokenType::expr:
-                first_item = parse_expr();
+            case TokenType::line:
+                first_item = parse_line(false);
                 break;
             case TokenType::caseBranch:
                 first_item = parse_caseBranch();
@@ -3501,12 +3542,16 @@ namespace brouwer
                 throw std::logic_error("unhandled body item type");
         }
 
+        std::cout << "waaaaat" << std::endl;
+
         if (!first_item)
         {
             throw std::runtime_error("expected at least one item in block");
         }
 
         main_ast.add_child(std::move(*first_item));
+
+        std::cout << ">>" << this->ch << "<<" << std::endl;
 
         if (!expect_newline())
         {
@@ -3521,8 +3566,8 @@ namespace brouwer
 
             switch (body_item_type)
             {
-                case TokenType::expr:
-                    item = parse_expr();
+                case TokenType::line:
+                    item = parse_line(false);
                     break;
                 case TokenType::caseBranch:
                     item = parse_caseBranch();
