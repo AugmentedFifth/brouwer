@@ -18,7 +18,7 @@ target/
 
 ## CMake stuff ##
 
-*.txt
+CMakeCache.txt
 *.cmake
 
 Makefile
