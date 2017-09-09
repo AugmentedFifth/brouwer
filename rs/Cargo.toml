@@ -1,0 +1,14 @@
+[package]
+name = "brouwer"
+version = "0.1.0"
+authors = ["AugmentedFifth <zcomito@gmail.com>"]
+
+[dependencies]
+clippy = {version = "*", optional = true}
+
+[features]
+default = []
+
+[[bin]]
+name = "brouwer"
+path = "src/main.rs"

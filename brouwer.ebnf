@@ -1,10 +1,25 @@
 (*
 
+integers as valid property accessors: item.0.display()
+
+ranges: [1..10] is just {x | x >= 1 ^ x <= 10 ^ x `elem` Z}, sorted ascending
+        [10..1]
+        [10,7..1]
+        [1..] maybe? using generators?
+
+initialization syntax for lists: [256; 8]
+
+break, continue
+
+ADTs
+
 no inheritance, only traits
 
 "generator" functions like js/python
 
 ? as syntax sugar for Maybe
+
+go, join (?!)
 
 *)
 

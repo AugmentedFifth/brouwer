@@ -7,6 +7,15 @@
 .cproject
 
 
+## Rust stuff ##
+
+# Cargo
+target/
+
+# rustfmt
+**/*.rs.bk
+
+
 ## CMake stuff ##
 
 *.txt
@@ -52,7 +61,7 @@ build/
 *.exe
 *.out
 *.app
-/Debug/
+Debug/
 
 
 ## Testing stuff ##

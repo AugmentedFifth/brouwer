@@ -6,7 +6,7 @@
 #include "Token.h"
 #include "Parser.h"
 
-int main(int argc, char* argv[])
+int main(int argc, char** argv)
 {
     using namespace brouwer;
     using AST = Tree<Token>;
