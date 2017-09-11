@@ -22,21 +22,29 @@ use std::process;
 fn main() {
     if let Some(filename) = env::args().nth(1) {
         let mut parser = match Parser::new(filename) {
-            Ok(parser) =>
-                parser,
-
+            Ok(parser) => parser,
             Err(e) => {
                 eprintln!("{}", e);
 
-                process::exit(1)
+                process::exit(1);
             },
         };
 
-        if let Some(ast) = parser.parse() {
-            log_depth_first(&ast, 0);
-            println!();
-        } else {
-            eprintln!("Parse failed.");
+        match parser.parse() {
+            Ok(Some(ast)) => {
+                log_depth_first(&ast, 0);
+                println!();
+            },
+            Ok(_) => {
+                eprintln!("Parse failed!");
+
+                process::exit(2);
+            },
+            Err(e) => {
+                eprintln!("Parser error:\n    {}", e);
+
+                process::exit(1);
+            },
         }
     } else {
         eprintln!("Please provide the source file.");

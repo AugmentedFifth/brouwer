@@ -12,3 +12,6 @@ default = []
 [[bin]]
 name = "brouwer"
 path = "src/main.rs"
+
+[profile.release] # cargo rustc --release -- -C link-args=-static
+lto = true
