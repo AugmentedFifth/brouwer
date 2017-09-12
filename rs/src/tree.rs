@@ -5,10 +5,10 @@ pub struct Tree<T> {
 
 
 impl<T> Tree<T> {
-    pub fn new(value: T) -> Self {
+    pub fn new(value: T, size_hint: usize) -> Self {
         Tree {
             value:    value,
-            children: Vec::new(),
+            children: Vec::with_capacity(size_hint),
         }
     }
 

@@ -28,9 +28,9 @@ impl Parser {
         Ok(Parser {
             charstream:    file.chars(),
             eof:           false,
-            charhistory:   VecDeque::new(),
+            charhistory:   VecDeque::with_capacity(20),
             ch:            ' ', // Dummy value.
-            currentindent: String::new(),
+            currentindent: String::with_capacity(32),
         })
     }
 
@@ -63,7 +63,7 @@ impl Parser {
             );
         }
 
-        let mut main_ast = new_ast_node(TokenType::Root);
+        let mut main_ast = new_ast_node(TokenType::Root, 1);
         let prog = if let Some(p) = self.parse_prog()? {
             p
         } else {
@@ -76,7 +76,7 @@ impl Parser {
     }
 
     fn parse_prog(&mut self) -> Result<Option<AST>, String> {
-        let mut prog = new_ast_node(TokenType::Prog);
+        let mut prog = new_ast_node(TokenType::Prog, 24);
 
         if let Some(mod_decl) = self.parse_mod_decl()? {
             prog.add_child(mod_decl);
@@ -104,7 +104,7 @@ impl Parser {
     }
 
     fn parse_mod_decl(&mut self) -> Result<Option<AST>, String> {
-        let mut mod_decl = new_ast_node(TokenType::ModDecl);
+        let mut mod_decl = new_ast_node(TokenType::ModDecl, 8);
 
         if let Some(mod_kwd) = self.parse_module_keyword()? {
             mod_decl.add_child(mod_kwd);
@@ -165,7 +165,7 @@ impl Parser {
     }
 
     fn parse_import(&mut self) -> Result<Option<AST>, String> {
-        let mut import = new_ast_node(TokenType::Import);
+        let mut import = new_ast_node(TokenType::Import, 10);
 
         if let Some(import_kwd) = self.parse_import_keyword()? {
             import.add_child(import_kwd);
@@ -254,7 +254,7 @@ impl Parser {
     ) -> Result<Option<AST>, String> {
         self.consume_blanks()?;
 
-        let mut line = new_ast_node(TokenType::Line);
+        let mut line = new_ast_node(TokenType::Line, 1);
 
         if let Some(expr) = self.parse_expr()? {
             line.add_child(expr);
@@ -329,7 +329,7 @@ impl Parser {
             return Ok(None);
         };
 
-        let mut expr = new_ast_node(TokenType::Expr);
+        let mut expr = new_ast_node(TokenType::Expr, 6);
         expr.add_child(first_subexpr);
 
         while let Some(subexpr) = self.parse_subexpr()? {
@@ -342,7 +342,7 @@ impl Parser {
     fn parse_subexpr(&mut self) -> Result<Option<AST>, String> {
         self.consume_blanks()?;
 
-        let mut subexpr = new_ast_node(TokenType::Subexpr);
+        let mut subexpr = new_ast_node(TokenType::Subexpr, 1);
 
         if let Some(var) = self.parse_var()? {
             subexpr.add_child(var);
@@ -417,7 +417,7 @@ impl Parser {
 
         self.consume_blanks()?;
 
-        let mut var = new_ast_node(TokenType::Var);
+        let mut var = new_ast_node(TokenType::Var, 6);
         var.add_child(var_keyword);
         var.add_child(pattern);
 
@@ -463,7 +463,7 @@ impl Parser {
 
         self.consume_blanks()?;
 
-        let mut assign = new_ast_node(TokenType::Assign);
+        let mut assign = new_ast_node(TokenType::Assign, 5);
         assign.add_child(pattern.clone());
 
         if let Some(colon) = self.parse_colon()? {
@@ -536,7 +536,7 @@ impl Parser {
 
         self.consume_blanks()?;
 
-        let mut fn_decl = new_ast_node(TokenType::FnDecl);
+        let mut fn_decl = new_ast_node(TokenType::FnDecl, 18);
         fn_decl.add_child(fn_keyword);
         fn_decl.add_child(fn_name);
 
@@ -584,7 +584,7 @@ impl Parser {
             return Err("expected closing paren".to_string());
         };
 
-        let mut parened = new_ast_node(TokenType::Parened);
+        let mut parened = new_ast_node(TokenType::Parened, 3);
         parened.add_child(l_paren);
         parened.add_child(expr);
         parened.add_child(r_paren);
@@ -608,7 +608,7 @@ impl Parser {
             return Err("expected expression to return".to_string());
         };
 
-        let mut return_ = new_ast_node(TokenType::Return);
+        let mut return_ = new_ast_node(TokenType::Return, 2);
         return_.add_child(return_keyword);
         return_.add_child(expr);
 
@@ -632,7 +632,7 @@ impl Parser {
             return Err("expected subject expression for case".to_string());
         };
 
-        let mut case = new_ast_node(TokenType::Case);
+        let mut case = new_ast_node(TokenType::Case, 6);
         case.add_child(case_keyword);
         case.add_child(subject_expr);
 
@@ -662,7 +662,7 @@ impl Parser {
             return Err("expected expression(s) after =>".to_string());
         };
 
-        let mut case_branch = new_ast_node(TokenType::CaseBranch);
+        let mut case_branch = new_ast_node(TokenType::CaseBranch, 3);
         case_branch.add_child(pattern);
         case_branch.add_child(fat_r_arrow);
         case_branch.add_child(line);
@@ -687,7 +687,7 @@ impl Parser {
             return Err("expected expression as if condition".to_string());
         };
 
-        let mut if_else = new_ast_node(TokenType::IfElse);
+        let mut if_else = new_ast_node(TokenType::IfElse, 9);
         if_else.add_child(if_keyword);
         if_else.add_child(if_condition);
 
@@ -717,7 +717,7 @@ impl Parser {
     fn parse_try(&mut self) -> Result<Option<AST>, String> {
         self.consume_blanks()?;
 
-        let mut try = new_ast_node(TokenType::Try);
+        let mut try = new_ast_node(TokenType::Try, 8);
 
         if let Some(try_kwd) = self.parse_try_keyword()? {
             self.consume_blanks()?;
@@ -768,7 +768,7 @@ impl Parser {
         self.consume_blanks()?;
 
         if let Some(while_condition) = self.parse_expr()? {
-            let mut while_ = new_ast_node(TokenType::While);
+            let mut while_ = new_ast_node(TokenType::While, 8);
             while_.add_child(while_keyword);
             while_.add_child(while_condition);
 
@@ -813,7 +813,7 @@ impl Parser {
             return Err("for must iterate over an expression".to_string());
         };
 
-        let mut for_ = new_ast_node(TokenType::For);
+        let mut for_ = new_ast_node(TokenType::For, 9);
         for_.add_child(for_keyword);
         for_.add_child(for_pattern);
         for_.add_child(in_keyword);
@@ -839,7 +839,7 @@ impl Parser {
             return Err("lambda expression requires 1+ args".to_string());
         };
 
-        let mut lambda = new_ast_node(TokenType::Lambda);
+        let mut lambda = new_ast_node(TokenType::Lambda, 8);
         lambda.add_child(backslash);
         lambda.add_child(first_param);
 
@@ -881,7 +881,7 @@ impl Parser {
             return Ok(None);
         };
 
-        let mut tuple_lit = new_ast_node(TokenType::TupleLit);
+        let mut tuple_lit = new_ast_node(TokenType::TupleLit, 9);
         tuple_lit.add_child(l_paren);
 
         self.consume_blanks()?;
@@ -931,7 +931,7 @@ impl Parser {
     fn parse_list_lit(&mut self) -> Result<Option<AST>, String> {
         self.consume_blanks()?;
 
-        let mut list_lit = new_ast_node(TokenType::ListLit);
+        let mut list_lit = new_ast_node(TokenType::ListLit, 12);
 
         if let Some(l_sq_bracket) = self.parse_l_sq_bracket()? {
             list_lit.add_child(l_sq_bracket);
@@ -990,7 +990,7 @@ impl Parser {
             return Err("expected | for list comprehension".to_string());
         };
 
-        let mut list_comp = new_ast_node(TokenType::ListComp);
+        let mut list_comp = new_ast_node(TokenType::ListComp, 12);
         list_comp.add_child(l_sq_bracket);
         list_comp.add_child(expr);
         list_comp.add_child(bar_);
@@ -1036,7 +1036,7 @@ impl Parser {
     fn parse_dict_lit(&mut self) -> Result<Option<AST>, String> {
         self.consume_blanks()?;
 
-        let mut dict_lit = new_ast_node(TokenType::DictLit);
+        let mut dict_lit = new_ast_node(TokenType::DictLit, 16);
 
         if let Some(l_curly_bracket) = self.parse_l_curly_bracket()? {
             dict_lit.add_child(l_curly_bracket);
@@ -1095,7 +1095,7 @@ impl Parser {
             return Err("expected | for dict comprehension".to_string());
         };
 
-        let mut dict_comp = new_ast_node(TokenType::DictComp);
+        let mut dict_comp = new_ast_node(TokenType::DictComp, 12);
         dict_comp.add_child(l_curly_bracket);
         dict_comp.add_child(dict_entry);
         dict_comp.add_child(bar_);
@@ -1139,7 +1139,7 @@ impl Parser {
     fn parse_set_lit(&mut self) -> Result<Option<AST>, String> {
         self.consume_blanks()?;
 
-        let mut set_lit = new_ast_node(TokenType::SetLit);
+        let mut set_lit = new_ast_node(TokenType::SetLit, 12);
 
         if let Some(l_curly_bracket) = self.parse_l_curly_bracket()? {
             set_lit.add_child(l_curly_bracket);
@@ -1198,7 +1198,7 @@ impl Parser {
             return Err("expected | for set comprehension".to_string());
         };
 
-        let mut set_comp = new_ast_node(TokenType::SetComp);
+        let mut set_comp = new_ast_node(TokenType::SetComp, 12);
         set_comp.add_child(l_curly_bracket);
         set_comp.add_child(expr);
         set_comp.add_child(bar_);
@@ -1243,21 +1243,21 @@ impl Parser {
         self.consume_blanks()?;
 
         if let Some(member_ident) = self.parse_member_ident()? {
-            let mut qual_ident = new_ast_node(TokenType::QualIdent);
+            let mut qual_ident = new_ast_node(TokenType::QualIdent, 1);
             qual_ident.add_child(member_ident);
 
             return Ok(Some(qual_ident));
         }
 
         if let Some(scoped_ident) = self.parse_scoped_ident()? {
-            let mut qual_ident = new_ast_node(TokenType::QualIdent);
+            let mut qual_ident = new_ast_node(TokenType::QualIdent, 1);
             qual_ident.add_child(scoped_ident);
 
             return Ok(Some(qual_ident));
         }
 
         if let Some(ident) = self.parse_ident()? {
-            let mut qual_ident = new_ast_node(TokenType::QualIdent);
+            let mut qual_ident = new_ast_node(TokenType::QualIdent, 1);
             qual_ident.add_child(ident);
 
             return Ok(Some(qual_ident));
@@ -1271,7 +1271,8 @@ impl Parser {
 
         if let Some(scoped_ident) = self.parse_scoped_ident()? {
             let mut namespaced_ident = new_ast_node(
-                TokenType::NamespacedIdent
+                TokenType::NamespacedIdent,
+                1
             );
             namespaced_ident.add_child(scoped_ident);
 
@@ -1280,7 +1281,8 @@ impl Parser {
 
         if let Some(ident) = self.parse_ident()? {
             let mut namespaced_ident = new_ast_node(
-                TokenType::NamespacedIdent
+                TokenType::NamespacedIdent,
+                1
             );
             namespaced_ident.add_child(ident);
 
@@ -1331,7 +1333,7 @@ impl Parser {
 
         if let Some(dot) = self.parse_dot()? {
             if let Some(second_ident) = self.parse_ident()? {
-                let mut member_ident = new_ast_node(TokenType::MemberIdent);
+                let mut member_ident = new_ast_node(TokenType::MemberIdent, 3);
                 member_ident.add_child(first_ident);
                 member_ident.add_child(dot);
                 member_ident.add_child(second_ident);
@@ -1368,7 +1370,7 @@ impl Parser {
 
         if let Some(double_colon) = self.parse_double_colon()? {
             if let Some(second_ident) = self.parse_ident()? {
-                let mut scoped_ident = new_ast_node(TokenType::ScopedIdent);
+                let mut scoped_ident = new_ast_node(TokenType::ScopedIdent, 3);
                 scoped_ident.add_child(first_ident);
                 scoped_ident.add_child(double_colon);
                 scoped_ident.add_child(second_ident);
@@ -1400,12 +1402,12 @@ impl Parser {
         self.consume_blanks()?;
 
         if let Some(namespaced_ident) = self.parse_namespaced_ident()? {
-            let mut type_ident = new_ast_node(TokenType::TypeIdent);
+            let mut type_ident = new_ast_node(TokenType::TypeIdent, 1);
             type_ident.add_child(namespaced_ident);
 
             Ok(Some(type_ident))
         } else if let Some(l_paren) = self.parse_l_paren()? {
-            let mut type_ident = new_ast_node(TokenType::TypeIdent);
+            let mut type_ident = new_ast_node(TokenType::TypeIdent, 7);
             type_ident.add_child(l_paren);
 
             if let Some(first_ident) = self.parse_type_ident()? {
@@ -1471,7 +1473,7 @@ impl Parser {
                     return Err("expected closing ] of list type".to_string());
                 };
 
-            let mut type_ident = new_ast_node(TokenType::TypeIdent);
+            let mut type_ident = new_ast_node(TokenType::TypeIdent, 3);
             type_ident.add_child(l_sq_bracket);
             type_ident.add_child(ident);
             type_ident.add_child(r_sq_bracket);
@@ -1486,7 +1488,7 @@ impl Parser {
 
             self.consume_blanks()?;
 
-            let mut type_ident = new_ast_node(TokenType::TypeIdent);
+            let mut type_ident = new_ast_node(TokenType::TypeIdent, 5);
             type_ident.add_child(l_curly_bracket);
             type_ident.add_child(ident);
 
@@ -1541,8 +1543,8 @@ impl Parser {
         }
 
         if self.expect_keyword("NaN")? {
-            let mut num_lit = new_ast_node(TokenType::NumLit);
-            let mut real_lit = new_ast_node(TokenType::RealLit);
+            let mut num_lit = new_ast_node(TokenType::NumLit, 1);
+            let mut real_lit = new_ast_node(TokenType::RealLit, 2);
 
             if let Some(m) = minus {
                 real_lit.add_child(m);
@@ -1555,8 +1557,8 @@ impl Parser {
         }
 
         if self.expect_keyword("Infinity")? {
-            let mut num_lit = new_ast_node(TokenType::NumLit);
-            let mut real_lit = new_ast_node(TokenType::RealLit);
+            let mut num_lit = new_ast_node(TokenType::NumLit, 1);
+            let mut real_lit = new_ast_node(TokenType::RealLit, 2);
 
             if let Some(m) = minus {
                 real_lit.add_child(m);
@@ -1591,8 +1593,8 @@ impl Parser {
         }
 
         if self.ch != '.' {
-            let mut num_lit = new_ast_node(TokenType::NumLit);
-            let mut int_lit = new_ast_node(TokenType::IntLit);
+            let mut num_lit = new_ast_node(TokenType::NumLit, 1);
+            let mut int_lit = new_ast_node(TokenType::IntLit, 2);
 
             if let Some(m) = minus {
                 int_lit.add_child(m);
@@ -1621,8 +1623,8 @@ impl Parser {
             }
         }
 
-        let mut num_lit = new_ast_node(TokenType::NumLit);
-        let mut real_lit = new_ast_node(TokenType::RealLit);
+        let mut num_lit = new_ast_node(TokenType::NumLit, 1);
+        let mut real_lit = new_ast_node(TokenType::RealLit, 2);
 
         if let Some(m) = minus {
             real_lit.add_child(m);
@@ -1656,7 +1658,7 @@ impl Parser {
             return Err(format!("expected ', got: {}", self.ch));
         };
 
-        let mut chr_lit = new_ast_node(TokenType::ChrLit);
+        let mut chr_lit = new_ast_node(TokenType::ChrLit, 3);
         chr_lit.add_child(init_single_quote);
         chr_lit.add_child(the_char);
         chr_lit.add_child(end_single_quote);
@@ -1667,7 +1669,7 @@ impl Parser {
     fn parse_str_lit(&mut self) -> Result<Option<AST>, String> {
         self.consume_blanks()?;
 
-        let mut str_lit = new_ast_node(TokenType::StrLit);
+        let mut str_lit = new_ast_node(TokenType::StrLit, 16);
 
         if let Some(init_double_quote) = self.parse_double_quote()? {
             str_lit.add_child(init_double_quote);
@@ -1709,7 +1711,7 @@ impl Parser {
             return Err("expected closing `".to_string());
         };
 
-        let mut infixed = new_ast_node(TokenType::Infixed);
+        let mut infixed = new_ast_node(TokenType::Infixed, 3);
         infixed.add_child(first_backtick);
         infixed.add_child(ident);
         infixed.add_child(second_backtick);
@@ -1720,7 +1722,7 @@ impl Parser {
     fn parse_pattern(&mut self) -> Result<Option<AST>, String> {
         self.consume_blanks()?;
 
-        let mut pattern = new_ast_node(TokenType::Pattern);
+        let mut pattern = new_ast_node(TokenType::Pattern, 8);
 
         if let Some(ident) = self.parse_ident()? {
             pattern.add_child(ident);
@@ -1964,7 +1966,7 @@ impl Parser {
                 return Err("expected ) after type".to_string());
             };
 
-            let mut param = new_ast_node(TokenType::Param);
+            let mut param = new_ast_node(TokenType::Param, 5);
             param.add_child(l_paren);
             param.add_child(pattern);
             param.add_child(colon);
@@ -1973,7 +1975,7 @@ impl Parser {
 
             Ok(Some(param))
         } else if let Some(pattern) = self.parse_pattern()? {
-            let mut param = new_ast_node(TokenType::Param);
+            let mut param = new_ast_node(TokenType::Param, 1);
             param.add_child(pattern);
 
             Ok(Some(param))
@@ -1991,7 +1993,7 @@ impl Parser {
 
         if let Some(l_arrow) = self.parse_l_arrow()? {
             if let Some(expr) = self.parse_expr()? {
-                let mut generator = new_ast_node(TokenType::Generator);
+                let mut generator = new_ast_node(TokenType::Generator, 3);
                 generator.add_child(pattern);
                 generator.add_child(l_arrow);
                 generator.add_child(expr);
@@ -2045,7 +2047,7 @@ impl Parser {
             );
         };
 
-        let mut dict_entry = new_ast_node(TokenType::DictEntry);
+        let mut dict_entry = new_ast_node(TokenType::DictEntry, 3);
         dict_entry.add_child(key);
         dict_entry.add_child(equals);
         dict_entry.add_child(val);
@@ -2841,13 +2843,13 @@ impl Parser {
 }
 
 #[inline(always)]
-pub fn new_ast_node(token_type: TokenType) -> AST {
-    AST::new(Token::new(token_type, String::new()))
+pub fn new_ast_node(token_type: TokenType, size_hint: usize) -> AST {
+    AST::new(Token::new(token_type, String::new()), size_hint)
 }
 
 #[inline(always)]
 pub fn new_ast_leaf<S: Into<String>>(token_type: TokenType, s: S) -> AST {
-    AST::new(Token::new(token_type, s.into()))
+    AST::new(Token::new(token_type, s.into()), 0)
 }
 
 #[inline(always)]
